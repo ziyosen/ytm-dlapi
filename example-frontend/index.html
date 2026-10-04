@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#08090c">
+    <title>Music Downloader — YouTube Music</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ===================== Aplikasi ===================== -->
+    <main class="app">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <span class="brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                </span>
+                <div class="brand-text">
+                    <h1>Music Downloader</h1>
+                    <p>Unduh lagu &amp; album dari YouTube Music</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Panel pencarian -->
+        <section class="search-panel">
+            <!-- Pilihan metode: Album / Lagu -->
+            <div class="segmented" id="MethodSwitch" role="tablist" aria-label="Jenis pencarian">
+                <button type="button" class="seg is-active" data-value="Album" role="tab" aria-selected="true">Album</button>
+                <button type="button" class="seg" data-value="Song" role="tab" aria-selected="false">Lagu</button>
+            </div>
+
+            <!-- Select asli tetap ada supaya main.js tetap kompatibel -->
+            <select id="Methods" class="visually-hidden" tabindex="-1" aria-hidden="true">
+                <option value="Album">Album</option>
+                <option value="Song">Song</option>
+            </select>
+
+            <!-- Kotak pencarian -->
+            <div class="search-field">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m20 20-3.2-3.2"></path>
+                </svg>
+                <input type="search" id="SearchBox" name="SearchBox" autocomplete="off" spellcheck="false"
+                       placeholder="Cari album atau lagu…">
+            </div>
+
+            <button type="button" class="btn primary search-btn" id="SearchBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m20 20-3.2-3.2"></path>
+                </svg>
+                <span>Cari</span>
+            </button>
+        </section>
+
+        <!-- Info status kecil (mis. "12 hasil ditemukan") -->
+        <p class="status" id="Status" hidden></p>
+
+        <!-- Hasil pencarian dirender di sini oleh main.js -->
+        <section id="Content" class="results" aria-live="polite">
+            <!-- Keadaan awal: kosong -->
+            <div class="empty" id="EmptyState">
+                <span class="empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                </span>
+                <p>Belum ada apa-apa di sini</p>
+                <span>Ketik judul album atau lagu, lalu tekan <kbd>Enter</kbd></span>
+            </div>
+        </section>
+
+        <!-- Footer kecil -->
+        <footer class="app-footer">
+            <span>YouTube Music Downloader</span>
+            <span class="dot">•</span>
+            <span>Album &amp; lagu, langsung ke perangkatmu</span>
+        </footer>
+    </main>
+
+    <!-- ===================== Library ===================== -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+            integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.5.0/jszip.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"
+            integrity="sha512-csNcFYJniKjJxRWRV1R7fvnXrycHP6qDR21mgz1ZP55xY5d+aHLfo9/FcGDQLfn2IfngbAHd8LdfsagcCqgTcQ=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!-- ===================== Logika aplikasi ===================== -->
+    <script src="main.js"></script>
+</body>
+</html>
