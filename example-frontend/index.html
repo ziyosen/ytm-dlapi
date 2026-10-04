@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#08090c">
-    <title>Music Downloader — YouTube Music</title>
+    <title>Music Player — YouTube Music</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,15 +29,14 @@
                     </svg>
                 </span>
                 <div class="brand-text">
-                    <h1>Music Downloader</h1>
-                    <p>Unduh lagu &amp; album dari YouTube Music</p>
+                    <h1>Music Player</h1>
+                    <p>Putar lagu &amp; album dari YouTube Music</p>
                 </div>
             </div>
         </header>
 
         <!-- Panel pencarian -->
         <section class="search-panel">
-            <!-- Pilihan metode: Album / Lagu -->
             <div class="segmented" id="MethodSwitch" role="tablist" aria-label="Jenis pencarian">
                 <button type="button" class="seg is-active" data-value="Album" role="tab" aria-selected="true">Album</button>
                 <button type="button" class="seg" data-value="Song" role="tab" aria-selected="false">Lagu</button>
@@ -48,7 +48,6 @@
                 <option value="Song">Song</option>
             </select>
 
-            <!-- Kotak pencarian -->
             <div class="search-field">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -69,12 +68,10 @@
             </button>
         </section>
 
-        <!-- Info status kecil (mis. "12 hasil ditemukan") -->
         <p class="status" id="Status" hidden></p>
 
         <!-- Hasil pencarian dirender di sini oleh main.js -->
         <section id="Content" class="results" aria-live="polite">
-            <!-- Keadaan awal: kosong -->
             <div class="empty" id="EmptyState">
                 <span class="empty-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -89,22 +86,63 @@
             </div>
         </section>
 
-        <!-- Footer kecil -->
         <footer class="app-footer">
-            <span>YouTube Music Downloader</span>
+            <span>YouTube Music Player</span>
             <span class="dot">•</span>
-            <span>Album &amp; lagu, langsung ke perangkatmu</span>
+            <span>Lagu diputar langsung, otomatis lanjut ke lagu berikutnya</span>
         </footer>
     </main>
+
+    <!-- ===================== Player bar ===================== -->
+    <div class="player" id="Player" hidden>
+        <div class="player-cover">
+            <img id="PlayerCover" alt="" src="">
+        </div>
+
+        <div class="player-info">
+            <strong id="PlayerTitle">—</strong>
+            <span id="PlayerArtist">—</span>
+        </div>
+
+        <div class="player-controls">
+            <button type="button" class="pbtn" id="PrevBtn" title="Sebelumnya" aria-label="Sebelumnya">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M6 5h2.2v14H6zM19 5v14L9.5 12z"/>
+                </svg>
+            </button>
+            <button type="button" class="pbtn main" id="PlayBtn" title="Putar / Jeda" aria-label="Putar atau jeda">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19 12z"/></svg>
+            </button>
+            <button type="button" class="pbtn" id="NextBtn" title="Berikutnya" aria-label="Berikutnya">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M15.8 5H18v14h-2.2zM5 5v14l9.5-7z"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="player-seek">
+            <span id="CurTime">0:00</span>
+            <input type="range" id="Seek" min="0" max="1000" step="1" value="0" aria-label="Posisi lagu">
+            <span id="DurTime">0:00</span>
+        </div>
+
+        <div class="player-vol">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 5 6 9H3v6h3l5 4z"></path>
+                <path d="M16 9a4 4 0 0 1 0 6"></path>
+            </svg>
+            <input type="range" id="Vol" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+        </div>
+    </div>
+
+    <!-- Elemen audio (sumber diisi oleh main.js) -->
+    <audio id="Audio" preload="none"></audio>
 
     <!-- ===================== Library ===================== -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"
             integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
             crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.5.0/jszip.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"
-            integrity="sha512-csNcFYJniKjJxRWRV1R7fvnXrycHP6qDR21mgz1ZP55xY5d+aHLfo9/FcGDQLfn2IfngbAHd8LdfsagcCqgTcQ=="
-            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
     <!-- ===================== Logika aplikasi ===================== -->
     <script src="main.js"></script>
