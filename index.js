@@ -1,23 +1,23 @@
-const express = require('express');
-const app = express();
-const search = require('./api/search.js')
-const get = require('./api/get.js')
-const stream = require('./api/stream.js')
-const download = require('./api/download.js')
+/* ============================================================================
+   index.js  —  Server lokal
+   ----------------------------------------------------------------------------
+   Di Vercel, entry point-nya adalah `api/index.js` (lihat vercel.json).
+   File ini tetap dipertahankan supaya bisa dijalankan di komputer sendiri:
+
+       node index.js
+       npm start
+
+   App-nya juga di-export supaya tetap kompatibel kalau Vercel memakai file ini.
+   ========================================================================== */
+const app = require('./api/index.js');
 const port = process.env.PORT || 3000;
 
-app.get('/', (req, res) => {
-    res.sendFile(`${__dirname}/example-frontend/index.html`) // Edit this to your preferred client html page
-})
+// Export untuk Vercel
+module.exports = app;
 
-// Routes
-app.use('/api/', search);
-app.use('/api/get', get);
-app.use('/api/stream', stream);
-app.use('/api/download', download);
-app.use(express.static(`${__dirname}/example-frontend`))
-
-app.listen(port, () => {
-    console.log(`App is now working on: ${port}`)
-})
-
+// Listen HANYA kalau dijalankan langsung (bukan saat di-require)
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`App is now working on: ${port}`);
+    });
+}
