@@ -1,0 +1,717 @@
+/* ============================================================================
+   Music Downloader — Stylesheet
+   Tema gelap, selaras dengan dashboard.html (indigo #6366f1 + Inter)
+   ========================================================================== */
+
+/* ------------------------------- Token ---------------------------------- */
+:root {
+    color-scheme: dark;
+    --bg: #08090c;
+    --bg-2: #0d0f15;
+    --surface: rgba(255, 255, 255, 0.028);
+    --surface-2: rgba(255, 255, 255, 0.05);
+    --surface-3: rgba(255, 255, 255, 0.08);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --text: #eceef4;
+    --muted: #9298a8;
+    --muted-2: #676d7d;
+    --primary: #6366f1;
+    --primary-2: #818cf8;
+    --primary-3: #a5b4fc;
+    --emerald: #10b981;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --radius: 16px;
+    --radius-sm: 11px;
+    --radius-xs: 8px;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.85);
+    --ring: 0 0 0 3px rgba(99, 102, 241, 0.28);
+}
+
+/* ------------------------------- Dasar ---------------------------------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--bg);
+    /* Cahaya lembut di belakang supaya tidak terasa datar */
+    background-image:
+        radial-gradient(900px 480px at 12% -8%, rgba(99, 102, 241, 0.16), transparent 62%),
+        radial-gradient(760px 420px at 92% 4%, rgba(129, 140, 248, 0.10), transparent 60%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+img { display: block; max-width: 100%; }
+
+button,
+input,
+select { font: inherit; color: inherit; }
+
+kbd {
+    font-family: var(--mono);
+    font-size: 0.78em;
+    padding: 1px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.visually-hidden {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ------------------------------ Kerangka -------------------------------- */
+.app {
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 34px 20px 72px;
+}
+
+/* ------------------------------- Header --------------------------------- */
+.app-header { margin-bottom: 22px; }
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 15px;
+    color: #fff;
+    background: linear-gradient(140deg, var(--primary-2), var(--primary));
+    box-shadow: 0 12px 26px -12px rgba(99, 102, 241, 0.9);
+}
+
+.brand-icon svg { width: 26px; height: 26px; }
+
+.brand-text h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.brand-text p {
+    margin: 2px 0 0;
+    font-size: 0.86rem;
+    color: var(--muted);
+}
+
+/* --------------------------- Panel pencarian ---------------------------- */
+.search-panel {
+    position: sticky;
+    top: 14px;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: rgba(13, 15, 21, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--shadow);
+}
+
+/* Segmented control Album / Lagu */
+.segmented {
+    position: relative;
+    display: inline-flex;
+    gap: 3px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.seg {
+    appearance: none;
+    border: 0;
+    cursor: pointer;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+    transition: color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.seg:hover { color: var(--text); }
+
+.seg.is-active {
+    color: #fff;
+    background: linear-gradient(140deg, var(--primary-2), var(--primary));
+    box-shadow: 0 8px 18px -10px rgba(99, 102, 241, 0.95);
+}
+
+/* Kotak input */
+.search-field {
+    position: relative;
+    flex: 1 1 240px;
+    min-width: 180px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: var(--muted-2);
+    pointer-events: none;
+}
+
+#SearchBox {
+    width: 100%;
+    padding: 11px 14px 11px 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+#SearchBox::placeholder { color: var(--muted-2); }
+
+#SearchBox:focus {
+    border-color: rgba(99, 102, 241, 0.6);
+    background: var(--surface-2);
+    box-shadow: var(--ring);
+}
+
+#SearchBox::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* Tombol */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 0.86rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform .14s ease, background .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease;
+}
+
+.btn svg { width: 17px; height: 17px; }
+
+.btn:active { transform: translateY(1px); }
+
+.btn.primary {
+    color: #fff;
+    background: linear-gradient(140deg, var(--primary-2), var(--primary));
+    box-shadow: 0 12px 24px -14px rgba(99, 102, 241, 0.95);
+}
+
+.btn.primary:hover { filter: brightness(1.07); }
+
+.btn.ghost {
+    color: var(--text);
+    background: var(--surface);
+    border-color: var(--border);
+}
+
+.btn.ghost:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+}
+
+.btn.sm {
+    padding: 7px 13px;
+    font-size: 0.8rem;
+    border-radius: var(--radius-xs);
+}
+
+.btn.is-busy {
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+.btn.is-done {
+    color: #d1fae5;
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.45);
+}
+
+/* -------------------------------- Status -------------------------------- */
+.status {
+    margin: 16px 2px 0;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+.status b { color: var(--primary-3); font-weight: 600; }
+
+/* ------------------------------- Hasil ---------------------------------- */
+.results { margin-top: 18px; }
+
+.results.is-albums {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+    gap: 16px;
+}
+
+.results.is-songs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Kartu dasar */
+.card {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition: border-color .2s ease, transform .2s ease, background .2s ease;
+}
+
+.card:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+}
+
+/* ----------------------------- Kartu album ------------------------------ */
+.album {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.album .cover {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.album .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform .35s ease;
+}
+
+.album:hover .cover img { transform: scale(1.05); }
+
+.album .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 13px 14px 15px;
+}
+
+.album .meta h3 {
+    margin: 0;
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.album .meta .by {
+    margin: 0 0 6px;
+    font-size: 0.79rem;
+    color: var(--muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.album .meta .btn { align-self: flex-start; }
+
+/* Album yang sedang dibuka melebar penuh, layout 2 kolom */
+.album.is-open {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 172px minmax(0, 1fr);
+    grid-template-areas:
+        "cover meta"
+        "toolbar toolbar"
+        "tracks tracks";
+    gap: 14px 18px;
+    padding: 16px;
+}
+
+.album.is-open .cover {
+    grid-area: cover;
+    border-radius: var(--radius-sm);
+}
+
+.album.is-open .meta {
+    grid-area: meta;
+    padding: 0;
+    justify-content: center;
+}
+
+.album.is-open .album-toolbar { grid-area: toolbar; margin: 0; }
+.album.is-open .tracklist { grid-area: tracks; }
+
+/* --------------------------- Baris lagu (Song) -------------------------- */
+.song {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px 10px 10px;
+}
+
+.song .cover {
+    flex: 0 0 auto;
+    width: 58px;
+    height: 58px;
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    background: var(--surface-2);
+}
+
+.song .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.song .info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.song .info h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song .info p {
+    margin: 2px 0 0;
+    font-size: 0.79rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song .actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ------------------------------ Tracklist ------------------------------- */
+.album-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 2px 0 10px;
+}
+
+.format {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.format select {
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg-2);
+    color: var(--text);
+    outline: none;
+    cursor: pointer;
+}
+
+.format select:focus { box-shadow: var(--ring); border-color: rgba(99, 102, 241, 0.6); }
+
+.tracklist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.track {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 11px;
+    border-radius: var(--radius-xs);
+    transition: background .16s ease;
+}
+
+.track:hover { background: var(--surface-2); }
+
+.track-no {
+    flex: 0 0 auto;
+    min-width: 26px;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--muted-2);
+}
+
+.track-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.87rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --------------------------- Progress unduhan --------------------------- */
+.dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 156px;
+    justify-content: flex-end;
+}
+
+.dl-bar {
+    position: relative;
+    flex: 0 0 86px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--surface-3);
+    overflow: hidden;
+}
+
+.dl-bar i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--primary-2), var(--primary));
+    transition: width .25s ease;
+}
+
+.dl.is-done .dl-bar i { background: linear-gradient(90deg, #34d399, var(--emerald)); }
+
+.dl-text {
+    font-size: 0.74rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.dl.is-done .dl-text { color: #6ee7b7; }
+
+/* ------------------------------ Audio player ---------------------------- */
+/* Player turun ke barisnya sendiri, lebar penuh */
+.player-row {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 2px 4px 4px;
+}
+
+audio {
+    width: 100%;
+    height: 36px;
+    border-radius: 99px;
+    outline: none;
+    accent-color: var(--primary);
+}
+
+/* Sembunyikan tombol unduh bawaan agar rapi (opsional) */
+audio::-webkit-media-controls-enclosure {
+    border-radius: 99px;
+    background: var(--surface-2);
+}
+
+/* ---------------------------- Keadaan kosong ---------------------------- */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 66px 24px;
+    text-align: center;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.empty-icon {
+    display: grid;
+    place-items: center;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 8px;
+    border-radius: 50%;
+    color: var(--primary-3);
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.28);
+}
+
+.empty-icon svg { width: 28px; height: 28px; }
+
+.empty p {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+}
+
+.empty span {
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+/* ------------------------------ Memuat ---------------------------------- */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 11px;
+    padding: 60px 20px;
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--surface-3);
+    border-top-color: var(--primary-2);
+    animation: spin .7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Kartu "skeleton" saat memuat */
+.skeleton {
+    border-radius: var(--radius);
+    background: linear-gradient(100deg, var(--surface) 30%, var(--surface-3) 50%, var(--surface) 70%);
+    background-size: 220% 100%;
+    animation: shimmer 1.25s ease-in-out infinite;
+    min-height: 96px;
+}
+
+@keyframes shimmer { to { background-position: -220% 0; } }
+
+/* ------------------------------- Footer --------------------------------- */
+.app-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 52px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    font-size: 0.79rem;
+    color: var(--muted-2);
+}
+
+.app-footer .dot { color: var(--border-strong); }
+
+/* ------------------------------ Responsif ------------------------------- */
+@media (max-width: 720px) {
+    .app { padding: 22px 14px 56px; }
+
+    .brand-text h1 { font-size: 1.28rem; }
+    .brand-icon { width: 44px; height: 44px; border-radius: 13px; }
+
+    .search-panel {
+        top: 8px;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .segmented { width: 100%; }
+    .seg { flex: 1 1 0; padding: 8px 10px; }
+
+    .search-field { flex: 1 1 100%; order: 2; }
+    .search-btn { flex: 1 1 100%; order: 3; }
+
+    .results.is-albums {
+        grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+        gap: 12px;
+    }
+
+    .song { flex-wrap: wrap; }
+    .song .actions { width: 100%; justify-content: flex-end; }
+
+    .format { margin-left: 0; }
+
+    .album.is-open {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "cover"
+            "meta"
+            "toolbar"
+            "tracks";
+    }
+
+    .album.is-open .cover { max-width: 172px; }
+
+    .track { flex-wrap: wrap; }
+    .track-title { flex: 1 1 100%; order: 2; padding-left: 38px; }
+    .track-no { order: 1; }
+    .track .btn,
+    .track .dl { order: 3; margin-left: auto; }
+}
+
+/* --------------------------- Kurangi gerakan ---------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
+}
