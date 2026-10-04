@@ -13,7 +13,6 @@ const app = express();
 const search = require('./search.js');
 const get = require('./get.js');
 const stream = require('./stream.js');
-const download = require('./download.js');
 
 const FRONTEND = `${__dirname}/../example-frontend`;
 
@@ -26,7 +25,6 @@ app.get('/', (req, res) => {
 app.use('/api/', search);
 app.use('/api/get', get);
 app.use('/api/stream', stream);
-app.use('/api/download', download);
 
 /* ------------------------------- File statis ----------------------------- */
 app.use(express.static(FRONTEND));
