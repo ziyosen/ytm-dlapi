@@ -1,17 +1,16 @@
 /* ============================================================================
-   Music Downloader — main.js
-   Semua fungsi & endpoint API sama seperti versi asli, hanya tampilan yang baru.
+   Music Player — main.js
+   Hanya untuk MEMUTAR lagu (streaming). Fitur unduh sudah dihapus.
+   Autoplay: kalau satu lagu habis, otomatis lanjut ke lagu berikutnya.
    ========================================================================== */
 (function () {
     "use strict";
 
     /* ========================================================================
        1) KONFIGURASI
-       ------------------------------------------------------------------------
-       API_BASE  = ""  -> API di host yang sama (default, seperti versi asli).
-       Kalau front-end ini ditaruh di tempat lain (mis. GitHub Pages) sedangkan
-       backend-nya di server lain, isi dengan alamat backend, contoh:
-           var API_BASE = "https://music-api.namamu.workers.dev";
+       API_BASE = ""  -> API di host yang sama (default).
+       Kalau front-end dipisah dari backend, isi dengan alamat backend, mis:
+           var API_BASE = "https://ytm-dlapi-xxx.vercel.app";
        ===================================================================== */
     var API_BASE = "";
 
@@ -25,24 +24,43 @@
     var Content = $('#Content');
     var Status = $('#Status');
 
-    /* ============================ 3) DATA ================================ */
-    var albumResults = [];   // daftar hasil album
-    var albumTracks = {};    // id album -> daftar track {url, title}
-    var trackURLs = {};      // id elemen -> url unduh track
-    var streamURLs = {};     // id elemen -> url stream lagu
+    var Audio = document.getElementById('Audio');
+    var PlayerEl = document.getElementById('Player');
+    var PlayBtn = document.getElementById('PlayBtn');
+    var SeekEl = document.getElementById('Seek');
+    var VolEl = document.getElementById('Vol');
 
-    /* ============================ 4) HELPER ============================== */
+    /* ============================= 3) STATE ============================== */
+    var albumResults = [];  // { playlistId, artist, name, year, cover }
+    var albumTracks = {};   // ai -> [{ videoId, title }]
+    var songResults = [];   // { videoId, title, artist, cover }
+
+    var queue = [];         // daftar lagu yang sedang diputar
+    var qIndex = -1;        // posisi sekarang di dalam queue
+    var qSource = null;     // 'songs' atau nomor album (ai)
+    var dragging = false;   // sedang menggeser seek bar?
+    var errStreak = 0;      // jumlah error berturut-turut
+
+    /* ============================== 4) IKON ============================== */
+    var ICON_PLAY =
+        '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19 12z"/></svg>';
+    var ICON_PAUSE =
+        '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>';
+
+    /* ============================ 5) HELPER ============================== */
     function esc(value) {
         return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
-    function norm(id) {
-        return String(id).replace(/^#/, '');
+    function fmtTime(sec) {
+        if (!isFinite(sec) || sec < 0) return '0:00';
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return m + ':' + (s < 10 ? '0' : '') + s;
     }
 
-    // Ambil gambar paling besar dari daftar thumbnail
     function bestCover(thumbnails, fallback) {
         if (Array.isArray(thumbnails) && thumbnails.length) {
             return thumbnails[thumbnails.length - 1].url || thumbnails[0].url || fallback;
@@ -65,9 +83,7 @@
     }
 
     function showLoading(text) {
-        Content.html(
-            '<div class="loading"><span class="spinner"></span>' + esc(text || 'Mencari…') + '</div>'
-        );
+        Content.html('<div class="loading"><span class="spinner"></span>' + esc(text || 'Mencari…') + '</div>');
     }
 
     function showEmpty(title, sub) {
@@ -88,408 +104,255 @@
     }
 
     function showError(err) {
-        console.error('[Music Downloader]', err);
-        showEmpty('Gagal mengambil data', 'Coba lagi sebentar, atau periksa koneksi ke server API.');
+        console.error('[Music Player]', err);
+        showEmpty('Gagal mengambil data', 'Coba lagi sebentar, atau periksa koneksi ke server.');
     }
 
-    /* ====================== 5) PROGRESS BAR UNDUHAN ====================== */
-    function mountProgress(id) {
-        var $el = $('#' + id);
-        if (!$el.length) return false;
-        $el.replaceWith(
-            '<span class="dl" id="' + id + '">' +
-                '<span class="dl-bar"><i></i></span>' +
-                '<span class="dl-text" id="' + id + '-label">Menyiapkan…</span>' +
-            '</span>'
-        );
-        return true;
+    /* ============================= 6) PLAYER ============================= */
+    function setQueue(list, startIndex, source) {
+        queue = list.slice();
+        qSource = source;
+        playAt(startIndex);
     }
 
-    function setProgress(id, percent, label, done) {
-        $('#' + id + ' .dl-bar i').css('width', Math.max(0, Math.min(100, percent)) + '%');
-        $('#' + id + '-label').text(label);
-        $('#' + id).toggleClass('is-done', !!done);
-    }
+    function playAt(i) {
+        if (i < 0 || i >= queue.length) return;
 
-    /* ==================== 6) PUTAR LAGU (STREAM) ========================= */
-    function streamAudio(link, id) {
-        id = norm(id);
-        var $btn = $('#' + id);
-        if (!$btn.length) return;
+        qIndex = i;
+        errStreak = 0;
 
-        var $card = $btn.closest('.song');
-        var src = api(link);
+        var track = queue[i];
+        Audio.src = api('/api/stream/song/' + track.videoId);
+        Audio.load();
 
-        $btn.remove(); // tombol "Putar" diganti player
-
-        if ($card.length) {
-            $card.append(
-                '<div class="player-row">' +
-                    '<audio controls autoplay preload="auto" src="' + esc(src) + '"></audio>' +
-                '</div>'
-            );
-        } else {
-            $('#Content').prepend('<audio controls autoplay src="' + esc(src) + '"></audio>');
-        }
-    }
-
-    /* ====================== 7) UNDUH SATU LAGU =========================== */
-    function downloadSong(link, id) {
-        id = norm(id);
-        if (!mountProgress(id)) return;
-
-        setProgress(id, 10, 'Memproses…');
-
-        $.ajax({
-            url: api(link),
-            type: 'GET',
-            xhrFields: { responseType: 'blob' },
-            xhr: function () {
-                var xhr = new window.XMLHttpRequest();
-                xhr.onreadystatechange = function () {
-                    if (xhr.readyState === 1) setProgress(id, 20, 'Memproses…');
-                    else if (xhr.readyState === 2) setProgress(id, 45, 'Mengunduh…');
-                    else if (xhr.readyState === 3) setProgress(id, 75, 'Mengirim…');
-                    else if (xhr.readyState === 4) setProgress(id, 92, 'Menyimpan…');
-                };
-                return xhr;
-            },
-            success: function (blob, status, xhr) {
-                var filename = '';
-                var disposition = xhr.getResponseHeader('Content-Disposition');
-                if (disposition && disposition.indexOf('attachment') !== -1) {
-                    var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                    var matches = filenameRegex.exec(disposition);
-                    if (matches != null && matches[1]) filename = matches[1].replace(/['"]/g, '');
-                }
-
-                if (typeof window.navigator.msSaveBlob !== 'undefined') {
-                    window.navigator.msSaveBlob(blob, filename);
-                } else {
-                    var URL = window.URL || window.webkitURL;
-                    var downloadUrl = URL.createObjectURL(blob);
-
-                    if (filename) {
-                        var a = document.createElement('a');
-                        if (typeof a.download === 'undefined') {
-                            window.location.href = downloadUrl;
-                        } else {
-                            a.href = downloadUrl;
-                            a.download = filename;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        }
-                    } else {
-                        window.location.href = downloadUrl;
-                    }
-                    setTimeout(function () { URL.revokeObjectURL(downloadUrl); }, 200);
-                }
-
-                setProgress(id, 100, 'Selesai', true);
-            },
-            error: function () {
-                setProgress(id, 0, 'Gagal mengunduh');
-            }
-        });
-    }
-
-    /* ==================== 8) UNDUH SATU ALBUM (ZIP) ====================== */
-    function downloadAlbum(id, numOfTracks, artist, album, year, format) {
-        var storage = [];
-        var failed = { status: false, reason: null };
-        var tick = 0;
-        var progressText = 'Mengunduh track';
-        var zip = new JSZip();
-        var zipped;
-
-        if (format === 'Jellyfin') {
-            zipped = zip.folder(artist + '/' + album + ' (' + year + ')');
-        } else {
-            zipped = zip.folder(artist + ' - ' + album + ' (' + year + ')');
-        }
-
-        // Ambil daftar track dari penyimpanan data (bukan dari DOM),
-        // supaya tetap benar walau ada track yang sudah diunduh satu-satu.
-        var list = albumTracks[id] || [];
-        for (var s = 0; s < list.length; s++) {
-            storage.push({ downloadURL: list[s].url, track: list[s].title });
-        }
-        var total = storage.length || numOfTracks;
-
-        var $btn = $('#' + id + '-download');
-        $btn.removeAttr('href').addClass('is-busy').text(progressText);
-
-        var animation = setInterval(function () {
-            tick = ++tick % 4;
-            $btn.text(progressText + new Array(tick + 1).join('.'));
-        }, 500);
-
-        var run = async function () {
-            for (var i = 0; i < total; i++) {
-                failed.status = false;
-                var pid = 'progress-' + id + '-' + i;
-
-                mountProgress(pid);
-                setProgress(pid, 25, 'Memproses…');
-
-                try {
-                    var response = await fetch(api(storage[i].downloadURL));
-                    var blob = await response.blob();
-                    setProgress(pid, 55, 'Mengambil berkas…');
-                    storage[i].blob = blob;
-                } catch (err) {
-                    console.error('Gagal pada track ke-' + (i + 1) + ':', err);
-                    setProgress(pid, 0, 'Gagal mengambil track');
-                    failed.status = true;
-                    failed.reason = err;
-                }
-
-                if (failed.status) continue;
-
-                setProgress(pid, 78, 'Mengarsipkan…');
-
-                if (format === 'Jellyfin') {
-                    zipped.file(('0' + (i + 1)).slice(-2) + ' - ' + storage[i].track + '.mp3', storage[i].blob);
-                } else {
-                    zipped.file(artist + ' - ' + storage[i].track + '.mp3', storage[i].blob);
-                }
-
-                setProgress(pid, 100, 'Selesai', true);
-            }
-
-            progressText = 'Mengarsipkan';
-            clearInterval(animation);
-            $btn.text(progressText + '…');
-
-            if (failed.status) {
-                console.error('Alasan gagal =>', failed.reason);
-                alert(failed.reason + ' : Tutup pesan ini lalu muat ulang halaman dan coba lagi...');
-                window.location.reload();
-                return;
-            }
-
-            zip.generateAsync({ type: 'blob' }).then(function (content) {
-                saveAs(content, artist + ' - ' + album + ' (' + year + ').zip');
-                console.log('Selesai — [' + artist + ' - ' + album + ' (' + year + ').zip] tanpa error.');
-                $btn.removeClass('is-busy').addClass('is-done').text('Selesai!');
+        var p = Audio.play();
+        if (p && p.catch) {
+            p.catch(function (err) {
+                console.warn('[Music Player] play ditolak browser:', err && err.message);
             });
-        };
+        }
 
-        run();
+        updateBar(track);
+        highlight();
+        setMediaSession(track);
     }
 
-    /* ======================= 9) BUKA / TUTUP TRACK ======================= */
-    function toggleAlbumTracks(id) {
-        var $btn = $('#' + id);
-        var $panel = $('#' + id + '-methods');
-        var $tracks = $('#' + id + '-tracks');
-        var $card = $btn.closest('.album');
-        var isOpen = $btn.attr('data-open') === '1';
-
-        if (isOpen) {
-            $panel.hide();
-            $tracks.hide();
-            $card.removeClass('is-open');
-            $btn.attr('data-open', '0').text('Lihat Track');
+    function nextTrack() {
+        if (qIndex + 1 < queue.length) {
+            playAt(qIndex + 1);
         } else {
-            $panel.show();
-            $tracks.show();
-            $card.addClass('is-open');
-            $btn.attr('data-open', '1').text('Sembunyikan');
+            setStatus('Sudah lagu terakhir di daftar ini.');
         }
     }
 
-    /* ==================== 10) AMBIL & TAMPILKAN TRACK ==================== */
-    function showAlbumTracks(playlistLink, id, artist, album, year, cover) {
-        if ($('#' + id + '-tracks').length) {
-            console.log("Tracklist '#" + id + "-tracks' sudah ada — pakai yang lama.");
-            toggleAlbumTracks(id);
+    function prevTrack() {
+        if (qIndex > 0) playAt(qIndex - 1);
+    }
+
+    function togglePlay() {
+        if (!Audio.src) return;
+        if (Audio.paused) {
+            var p = Audio.play();
+            if (p && p.catch) p.catch(function () {});
+        } else {
+            Audio.pause();
+        }
+    }
+
+    function updateBar(track) {
+        PlayerEl.hidden = false;
+        document.getElementById('PlayerCover').src = track.cover || '';
+        document.getElementById('PlayerTitle').textContent = track.title || '—';
+        document.getElementById('PlayerArtist').textContent = track.artist || '—';
+        document.title = (track.title || 'Music Player') + ' — Music Player';
+    }
+
+    function highlight() {
+        $('.is-playing').removeClass('is-playing');
+        if (qIndex < 0) return;
+
+        if (qSource === 'songs') {
+            $('.song[data-q="' + qIndex + '"]').addClass('is-playing');
+        } else if (qSource !== null) {
+            $('.track[data-ai="' + qSource + '"][data-q="' + qIndex + '"]').addClass('is-playing');
+        }
+    }
+
+    function setMediaSession(track) {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.metadata = new window.MediaMetadata({
+                title: track.title || '',
+                artist: track.artist || '',
+                album: track.album || '',
+                artwork: track.cover ? [{ src: track.cover, sizes: '512x512', type: 'image/jpeg' }] : []
+            });
+            navigator.mediaSession.setActionHandler('play', function () { Audio.play(); });
+            navigator.mediaSession.setActionHandler('pause', function () { Audio.pause(); });
+            navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
+            navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+        } catch (e) { /* sebagian browser tidak mendukung */ }
+    }
+
+    /* ============================ 7) RENDER ============================== */
+    function renderAlbums(data) {
+        resetContent('is-albums');
+        albumResults = [];
+        albumTracks = {};
+
+        for (var i = 0; i < data.length; i++) {
+            var item = data[i];
+            var artist = (item.artists && item.artists.length) ? item.artists[0].name : 'Various Artists';
+            var small = (item.thumbnails && item.thumbnails.length) ? item.thumbnails[0].url : '';
+            var big = bestCover(item.thumbnails, small);
+
+            albumResults.push({
+                playlistId: item.playlistId,
+                artist: artist,
+                name: item.name,
+                year: item.year,
+                cover: big
+            });
+
+            Content.append(
+                '<article class="album card" id="album-' + i + '" data-ai="' + i + '">' +
+                    '<div class="cover">' +
+                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(small) + '" ' +
+                             'alt="Cover ' + esc(item.name) + '">' +
+                    '</div>' +
+                    '<div class="meta">' +
+                        '<h3>' + esc(item.name) + '</h3>' +
+                        '<p class="by">' + esc(artist) + ' · ' + esc(item.year) + '</p>' +
+                        '<button type="button" class="btn ghost sm show-tracks" data-ai="' + i + '">Lihat Track</button>' +
+                    '</div>' +
+                '</article>'
+            );
+        }
+
+        setStatus('<b>' + data.length + '</b> album ditemukan');
+    }
+
+    function renderSongs(data) {
+        resetContent('is-songs');
+        songResults = [];
+
+        for (var j = 0; j < data.length; j++) {
+            var song = data[j];
+            var artistName = (song.artists && song.artists.length) ? song.artists[0].name : 'Various Artists';
+            var albumName = (song.album && song.album.name) ? song.album.name : '';
+            var cover = bestCover(song.thumbnails, '');
+
+            songResults.push({
+                videoId: song.videoId,
+                title: song.name,
+                artist: artistName,
+                album: albumName,
+                cover: cover
+            });
+
+            Content.append(
+                '<article class="song card" data-q="' + j + '">' +
+                    '<div class="cover">' +
+                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(cover) + '" ' +
+                             'alt="Cover ' + esc(song.name) + '">' +
+                    '</div>' +
+                    '<div class="info">' +
+                        '<h3>' + esc(song.name) + '</h3>' +
+                        '<p>' + esc(artistName) + (albumName ? ' · ' + esc(albumName) : '') + '</p>' +
+                    '</div>' +
+                    '<div class="actions">' +
+                        '<button type="button" class="btn primary sm play-btn" data-q="' + j + '">Putar</button>' +
+                    '</div>' +
+                '</article>'
+            );
+        }
+
+        setStatus('<b>' + data.length + '</b> lagu ditemukan — klik untuk memutar');
+    }
+
+    function openAlbum(ai) {
+        var album = albumResults[ai];
+        if (!album) return;
+
+        var $card = $('.album[data-ai="' + ai + '"]');
+        var $panel = $('#album-panel-' + ai);
+
+        // Sudah pernah dibuka -> cukup tampil/sembunyi
+        if ($panel.length) {
+            $panel.toggle();
+            $card.toggleClass('is-open', $panel.is(':visible'));
             return;
         }
 
-        fetch(api(playlistLink))
-            .then(function (resp) { return resp.json(); })
+        setStatus('Memuat daftar track…');
+
+        fetch(api('/api/get/album/playlist/' + album.playlistId))
+            .then(function (r) { return r.json(); })
             .then(function (data) {
-                toggleAlbumTracks(id);
+                if (!Array.isArray(data) || !data.length) {
+                    setStatus('Album ini tidak punya track yang bisa diputar.');
+                    return;
+                }
 
-                var panel =
-                    '<div id="' + id + '-methods" class="album-toolbar">' +
-                        '<button type="button" class="btn ghost sm" onclick="toggleAlbumTracks(\'' + id + '\')">Tutup</button>' +
-                        '<a id="' + id + '-download" class="btn primary sm" href="javascript:void(0)">Unduh Album</a>' +
-                        '<label class="format">Format' +
-                            '<select id="' + id + '-download-format">' +
-                                '<option value="Default">Default</option>' +
-                                '<option value="Jellyfin">Jellyfin</option>' +
-                            '</select>' +
-                        '</label>' +
-                    '</div>' +
-                    '<div id="' + id + '-tracks" class="tracklist"></div>';
-
-                // Taruh panel di dalam kartu album supaya layout 2 kolom bekerja
-                var $card = $('#' + id).closest('.album');
-                if ($card.length) $card.append(panel);
-                else $('#' + id).after(panel);
-
-                document.getElementById(id + '-download').onclick = function () {
-                    var format = document.getElementById(id + '-download-format').value;
-                    console.log('Format album dipilih: ' + format);
-                    downloadAlbum(id, data.length, artist, album, year, format);
-                };
-
-                var rows = '';
                 var list = [];
-                for (var i = 0; i < data.length; i++) {
-                    var title = data[i].playlistVideoRenderer.title.runs[0].text;
-                    var videoId = data[i].playlistVideoRenderer.videoId;
-                    var pid = 'progress-' + id + '-' + i;
-                    var url = '/api/download/song/' + videoId +
-                        '?artist=' + encodeURIComponent(artist) +
-                        '&album=' + encodeURIComponent(album) +
-                        '&title=' + encodeURIComponent(title) +
-                        '&cover=' + cover +
-                        '&year=' + year +
-                        '&track=' + (i + 1);
+                var rows = '';
 
-                    trackURLs[pid] = url;
-                    list.push({ url: url, title: title });
+                for (var i = 0; i < data.length; i++) {
+                    var node = data[i].playlistVideoRenderer;
+                    if (!node) continue;
+
+                    var title = node.title.runs[0].text;
+                    var videoId = node.videoId;
+                    var qi = list.length;
+
+                    list.push({ videoId: videoId, title: title });
 
                     rows +=
-                        '<div class="track">' +
-                            '<span class="track-no">' + ('0' + (i + 1)).slice(-2) + '</span>' +
+                        '<div class="track" data-ai="' + ai + '" data-q="' + qi + '" role="button" tabindex="0">' +
+                            '<span class="track-no">' + ('0' + (qi + 1)).slice(-2) + '</span>' +
                             '<span class="track-title">' + esc(title) + '</span>' +
-                            '<a class="btn ghost sm js-track" id="' + pid + '" href="javascript:void(0)" ' +
-                               'data-url="' + esc(url) + '" data-title="' + esc(title) + '" ' +
-                               'onclick="startTrackDownload(\'' + pid + '\')">Unduh</a>' +
+                            '<span class="track-play" aria-hidden="true">' +
+                                '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12z"/></svg>' +
+                            '</span>' +
                         '</div>';
                 }
-                albumTracks[id] = list;
-                $('#' + id + '-tracks').html(rows);
+
+                albumTracks[ai] = list;
+
+                $card.append(
+                    '<div class="album-panel" id="album-panel-' + ai + '">' +
+                        '<div class="album-toolbar">' +
+                            '<button type="button" class="btn primary sm play-all" data-ai="' + ai + '">Putar Semua</button>' +
+                            '<button type="button" class="btn ghost sm close-tracks" data-ai="' + ai + '">Tutup</button>' +
+                        '</div>' +
+                        '<div class="tracklist">' + rows + '</div>' +
+                    '</div>'
+                );
+
+                $card.addClass('is-open');
+                setStatus('<b>' + list.length + '</b> track — klik salah satu untuk memutar');
             })
             .catch(showError);
     }
 
-    /* ================== 11) RENDER HASIL PENCARIAN ======================= */
-    function showInformation(data, handler) {
-        albumResults = [];
+    function playFromAlbum(ai, qi) {
+        var album = albumResults[ai];
+        var list = albumTracks[ai] || [];
+        if (!album || !list.length) return;
 
-        if (!Array.isArray(data) || data.length === 0) {
-            showEmpty('Tidak ada hasil', 'Coba kata kunci lain atau ganti jenis pencarian.');
-            return;
-        }
+        var q = list.map(function (t) {
+            return { videoId: t.videoId, title: t.title, artist: album.artist, album: album.name, cover: album.cover };
+        });
 
-        if (handler === 'Album') {
-            resetContent('is-albums');
-
-            for (var i = 0; i < data.length; i++) {
-                var item = data[i];
-                var hasArtist = item.artists && item.artists.length > 0;
-                var artist = hasArtist ? item.artists[0].name : 'Various Artists';
-                var cover = bestCover(item.thumbnails, '');
-                var small = (item.thumbnails && item.thumbnails.length) ? item.thumbnails[0].url : cover;
-
-                // Cover yang dipakai backend tetap thumbnails[3] seperti versi asli
-                var apiCover = (item.thumbnails && item.thumbnails[3]) ? item.thumbnails[3].url : cover;
-
-                albumResults.push({
-                    playlistLink: '/api/get/album/playlist/' + item.playlistId,
-                    artist: artist,
-                    name: item.name,
-                    year: item.year,
-                    cover: apiCover
-                });
-
-                Content.append(
-                    '<article class="album card" id="album-' + i + '">' +
-                        '<div class="cover">' +
-                            '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(small) + '" ' +
-                                 'alt="Cover ' + esc(item.name) + '">' +
-                        '</div>' +
-                        '<div class="meta">' +
-                            '<h3>' + esc(item.name) + '</h3>' +
-                            '<p class="by">' + esc(artist) + ' · ' + esc(item.year) + '</p>' +
-                            '<button type="button" class="btn ghost sm" id="showAlbumTracks-' + i + '" ' +
-                                    'onclick="openAlbum(' + i + ')">Lihat Track</button>' +
-                        '</div>' +
-                    '</article>'
-                );
-            }
-
-            setStatus('<b>' + data.length + '</b> album ditemukan');
-
-        } else if (handler === 'Song') {
-            resetContent('is-songs');
-
-            for (var j = 0; j < data.length; j++) {
-                var song = data[j];
-                var hasArtist2 = song.artists && song.artists.length > 0;
-                var artistName = hasArtist2 ? song.artists[0].name : 'Various Artists';
-                var albumName = (song.album && song.album.name) ? song.album.name : '';
-
-                var baseCover = (song.thumbnails && song.thumbnails.length) ? song.thumbnails[0].url : '';
-                var bigCover = baseCover.replace(/w60-h60/, 'w544-h544');
-                var showCover = bestCover(song.thumbnails, baseCover);
-
-                var dlId = 'progress-bar-' + j;
-                var stId = 'streamButton-' + j;
-
-                var dlUrl = '/api/download/song/' + song.videoId +
-                    '?artist=' + encodeURIComponent(artistName) +
-                    '&title=' + encodeURIComponent(song.name) +
-                    '&album=' + encodeURIComponent(albumName) +
-                    '&cover=' + bigCover;
-
-                var stUrl = '/api/stream/song/' + song.videoId;
-
-                trackURLs[dlId] = dlUrl;
-                streamURLs[stId] = stUrl;
-
-                Content.append(
-                    '<article class="song card">' +
-                        '<div class="cover">' +
-                            '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(showCover) + '" ' +
-                                 'alt="Cover ' + esc(song.name) + '">' +
-                        '</div>' +
-                        '<div class="info">' +
-                            '<h3>' + esc(song.name) + '</h3>' +
-                            '<p>' + esc(artistName) + (albumName ? ' · ' + esc(albumName) : '') + '</p>' +
-                        '</div>' +
-                        '<div class="actions">' +
-                            '<button type="button" class="btn ghost sm" id="' + dlId + '" ' +
-                                    'onclick="startSongDownload(\'' + dlId + '\')">Unduh</button>' +
-                            '<button type="button" class="btn primary sm" id="' + stId + '" ' +
-                                    'onclick="startStream(\'' + stId + '\')">Putar</button>' +
-                        '</div>' +
-                    '</article>'
-                );
-            }
-
-            setStatus('<b>' + data.length + '</b> lagu ditemukan');
-        }
+        setQueue(q, qi, ai);
     }
 
-    /* ================= 12) FUNGSI GLOBAL (dipakai onclick) =============== */
-    window.openAlbum = function (i) {
-        var a = albumResults[i];
-        if (!a) return;
-        showAlbumTracks(a.playlistLink, 'showAlbumTracks-' + i, a.artist, a.name, a.year, a.cover);
-    };
+    function playFromSongs(qi) {
+        if (!songResults.length) return;
+        setQueue(songResults, qi, 'songs');
+    }
 
-    window.toggleAlbumTracks = toggleAlbumTracks;
-
-    window.startTrackDownload = function (id) {
-        downloadSong(trackURLs[norm(id)], norm(id));
-    };
-
-    window.startSongDownload = function (id) {
-        downloadSong(trackURLs[norm(id)], norm(id));
-    };
-
-    window.startStream = function (id) {
-        streamAudio(streamURLs[norm(id)], norm(id));
-    };
-
-    /* ========================= 13) PENCARIAN ============================= */
+    /* ============================ 8) PENCARIAN =========================== */
     function doSearch() {
         var query = (SearchBox.val() || '').trim();
         if (!query) {
@@ -497,32 +360,35 @@
             return;
         }
 
-        resetContent(Methods.val() === 'Album' ? 'is-albums' : 'is-songs');
+        var isAlbum = Methods.val() === 'Album';
+        resetContent(isAlbum ? 'is-albums' : 'is-songs');
         showLoading('Mencari "' + query + '"…');
 
-        if (Methods.val() === 'Album') {
-            fetch(api('/api/album/search?q=' + encodeURIComponent(query)))
-                .then(function (r) { return r.json(); })
-                .then(function (data) { showInformation(data, 'Album'); })
-                .catch(showError);
-        } else {
-            fetch(api('/api/song/search?q=' + encodeURIComponent(query)))
-                .then(function (r) { return r.json(); })
-                .then(function (data) { showInformation(data, 'Song'); })
-                .catch(showError);
-        }
+        var url = isAlbum
+            ? '/api/album/search?q=' + encodeURIComponent(query)
+            : '/api/song/search?q=' + encodeURIComponent(query);
+
+        fetch(api(url))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!Array.isArray(data) || data.length === 0) {
+                    showEmpty('Tidak ada hasil', 'Coba kata kunci lain atau ganti jenis pencarian.');
+                    return;
+                }
+                if (isAlbum) renderAlbums(data);
+                else renderSongs(data);
+            })
+            .catch(showError);
     }
 
-    /* ======================= 14) EVENT BINDING =========================== */
-    // Enter di kotak pencarian
-    SearchBox.on('keyup', function (event) {
-        if (event.keyCode === 13 || event.key === 'Enter') {
-            event.preventDefault();
+    /* ============================ 9) EVENT =============================== */
+    // Pencarian
+    SearchBox.on('keyup', function (e) {
+        if (e.keyCode === 13 || e.key === 'Enter') {
+            e.preventDefault();
             doSearch();
         }
     });
-
-    // Tombol "Cari"
     $('#SearchBtn').on('click', doSearch);
 
     // Segmented control Album / Lagu
@@ -530,22 +396,113 @@
         var value = $(this).data('value');
         $('#MethodSwitch .seg').removeClass('is-active').attr('aria-selected', 'false');
         $(this).addClass('is-active').attr('aria-selected', 'true');
-
         Methods.val(value).trigger('change');
     });
 
-    // Ganti metode -> kosongkan hasil (perilaku asli)
     Methods.on('change', function () {
         Content.removeClass('is-albums is-songs').empty();
         setStatus('');
         SearchBox.val('').trigger('focus');
     });
 
-    // Ekspos beberapa fungsi agar tetap kompatibel dengan kode lama
-    window.streamAudio = streamAudio;
-    window.downloadSong = downloadSong;
-    window.downloadAlbum = downloadAlbum;
-    window.showAlbumTracks = showAlbumTracks;
-    window.showInformation = showInformation;
+    // Klik di area hasil (pakai event delegation)
+    Content.on('click', '.show-tracks', function () {
+        openAlbum(parseInt($(this).attr('data-ai'), 10));
+    });
 
+    Content.on('click', '.close-tracks', function () {
+        var ai = parseInt($(this).attr('data-ai'), 10);
+        $('#album-panel-' + ai).hide();
+        $('.album[data-ai="' + ai + '"]').removeClass('is-open');
+    });
+
+    Content.on('click', '.play-all', function () {
+        playFromAlbum(parseInt($(this).attr('data-ai'), 10), 0);
+    });
+
+    Content.on('click', '.track', function () {
+        var ai = parseInt($(this).attr('data-ai'), 10);
+        var qi = parseInt($(this).attr('data-q'), 10);
+        // Klik lagu yang sedang diputar -> jeda / lanjut
+        if (qSource === ai && qIndex === qi && Audio.src) {
+            togglePlay();
+            return;
+        }
+        playFromAlbum(ai, qi);
+    });
+
+    Content.on('click', '.song', function () {
+        var qi = parseInt($(this).attr('data-q'), 10);
+        if (qSource === 'songs' && qIndex === qi && Audio.src) {
+            togglePlay();
+            return;
+        }
+        playFromSongs(qi);
+    });
+
+    // Kontrol player
+    PlayBtn.addEventListener('click', togglePlay);
+    document.getElementById('PrevBtn').addEventListener('click', prevTrack);
+    document.getElementById('NextBtn').addEventListener('click', nextTrack);
+
+    // Seek
+    SeekEl.addEventListener('input', function () {
+        dragging = true;
+        var d = Audio.duration || 0;
+        if (d) document.getElementById('CurTime').textContent = fmtTime((SeekEl.value / 1000) * d);
+    });
+    SeekEl.addEventListener('change', function () {
+        var d = Audio.duration || 0;
+        if (d) Audio.currentTime = (SeekEl.value / 1000) * d;
+        dragging = false;
+    });
+
+    // Volume
+    VolEl.addEventListener('input', function () {
+        Audio.volume = parseFloat(VolEl.value);
+    });
+
+    // Kejadian audio
+    Audio.addEventListener('play', function () { PlayBtn.innerHTML = ICON_PAUSE; });
+    Audio.addEventListener('pause', function () { PlayBtn.innerHTML = ICON_PLAY; });
+
+    Audio.addEventListener('loadedmetadata', function () {
+        document.getElementById('DurTime').textContent = fmtTime(Audio.duration);
+    });
+
+    Audio.addEventListener('timeupdate', function () {
+        var d = Audio.duration || 0;
+        if (!dragging && d) {
+            SeekEl.value = (Audio.currentTime / d) * 1000;
+            document.getElementById('CurTime').textContent = fmtTime(Audio.currentTime);
+        }
+    });
+
+    // ==== AUTOPLAY: lagu habis -> lanjut otomatis ke lagu berikutnya ====
+    Audio.addEventListener('ended', function () {
+        nextTrack();
+    });
+
+    // Kalau satu lagu gagal diputar, coba lompat ke berikutnya (maks 3 kali)
+    Audio.addEventListener('error', function () {
+        if (!Audio.src) return;
+        errStreak++;
+        console.warn('[Music Player] gagal memutar lagu ke-' + (qIndex + 1));
+
+        if (errStreak <= 3 && qIndex + 1 < queue.length) {
+            setStatus('Lagu ini gagal diputar — lanjut ke lagu berikutnya…');
+            setTimeout(nextTrack, 1200);
+        } else {
+            setStatus('<b>Gagal</b> memutar lagu ini. Coba lagu lain ya.');
+        }
+    });
+
+    // Ekspos beberapa fungsi (untuk debugging di console)
+    window.musicPlayer = {
+        playAt: playAt,
+        next: nextTrack,
+        prev: prevTrack,
+        toggle: togglePlay,
+        queue: function () { return queue; }
+    };
 })();
