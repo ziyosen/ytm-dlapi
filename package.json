@@ -3,14 +3,18 @@
   "version": "1.0.0",
   "description": "A Youtube-Music API/Downloader running on Express",
   "main": "index.js",
-  "repository": "https://github.com/Thanatoslayer6/ytm-dlapi.git",
-  "author": "Thanatoslayer6 <Thanatoslayer6@gmail.com>",
+  "repository": "https://github.com/ziyosen/ytm-dlapi.git",
   "license": "ISC",
   "scripts": {
-      "start": "node index.js",
-      "upgradeDependencies": "yarn --latest upgrade-interactive"
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "dependencies": {
+    "axios": "^1.7.7",
+    "content-disposition": "^0.5.4",
     "express": "^4.18.2",
     "ffmpeg-static": "^5.1.0",
     "fluent-ffmpeg": "^2.1.2",
