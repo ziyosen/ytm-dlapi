@@ -75,7 +75,10 @@ router.get('/song/:videoId', async function (req, res) {
     const client = typeof req.query.client === 'string' ? req.query.client : '';
 
     // Daftar player client yang dicoba berurutan kalau satu gagal
-    const CLIENT_FALLBACK = ['', 'tv', 'android_vr', 'mweb'];
+    /* Daftar player client yang dicoba berurutan kalau satu gagal.
+       Dibatasi 2 supaya total waktu resolve tidak melebihi batas 60s
+       fungsi Vercel saat cold start. */
+    const CLIENT_FALLBACK = ['', 'tv'];
     const klienCoba = client ? [client] : CLIENT_FALLBACK;
 
     try {
