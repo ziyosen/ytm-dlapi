@@ -68,6 +68,39 @@
         return fallback || '';
     }
 
+    /*
+      Thumbnail lagu yang sebenarnya: i.ytimg.com/vi/<id>/mqdefault.jpg
+      URL dari ytmusic-api kadang berupa avatar artis (yt3.googleusercontent)
+      atau gagal dimuat di sebagian jaringan HP — pakai ytimg langsung kalau
+      ada videoId, itu thumbnail YouTube resmi selalu ada.
+    */
+    function thumbLagu(item) {
+        if (item && item.videoId) {
+            return 'https://i.ytimg.com/vi/' + encodeURIComponent(item.videoId) + '/mqdefault.jpg';
+        }
+        return item && item.cover ? item.cover : '';
+    }
+
+    /*
+      Fallback gambar: kalau URL cover gagal dimuat (hotlink diblok,
+      jaringan HP, dsb) — coba i.ytimg.com via videoId, lalu placeholder.
+    */
+    function pasangFallbackImg(img) {
+        img.onerror = function () {
+            img.onerror = null;
+            var vid = img.getAttribute('data-vid');
+            if (vid && img.src.indexOf('i.ytimg.com') === -1) {
+                img.src = 'https://i.ytimg.com/vi/' + encodeURIComponent(vid) + '/mqdefault.jpg';
+            } else {
+                img.onerror = null;
+                img.src = 'data:image/svg+xml,' + encodeURIComponent(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240">' +
+                    '<rect width="240" height="240" fill="#1a1c26"/>' +
+                    '<text x="120" y="140" font-size="70" text-anchor="middle" fill="#6366f1">♪</text></svg>');
+            }
+        };
+    }
+
     function setStatus(html) {
         if (!html) {
             Status.attr('hidden', true).html('');
@@ -162,12 +195,18 @@
 
     function updateBar(track) {
         PlayerEl.hidden = false;
-        document.getElementById('PlayerCover').src = track.cover || '';
+        var cov = document.getElementById('PlayerCover');
+        cov.setAttribute('data-vid', track.videoId || '');
+        pasangFallbackImg(cov);
+        cov.src = thumbLagu(track);
         document.getElementById('PlayerTitle').textContent = track.title || '—';
         document.getElementById('PlayerArtist').textContent = track.artist || '—';
         // Sinkron ke tampilan Now Playing (fullscreen) — TIDAK dibuka otomatis,
         // cukup klik cover/judul di player bar kalau mau tampilan besar.
-        document.getElementById('NpCover').src = track.cover || '';
+        var ncv = document.getElementById('NpCover');
+        ncv.setAttribute('data-vid', track.videoId || '');
+        pasangFallbackImg(ncv);
+        ncv.src = thumbLagu(track);
         document.getElementById('NpTitle').textContent = track.title || '—';
         document.getElementById('NpArtist').textContent = track.artist || '—';
         document.title = (track.title || 'Music Player') + ' — Music Player';
@@ -248,6 +287,8 @@
             var artist = item.artist || 'Various Artists';
             var cover = item.cover || '';
 
+            // Album: pakai cover dari API, tapi fallback ke thumbnail video pertama
+            // kalau URL-nya bermasalah (ditangani onerror di bawah).
             albumResults.push({
                 albumId: item.albumId || '',
                 playlistId: item.playlistId || '',
@@ -260,7 +301,7 @@
             Content.append(
                 '<article class="album card" id="album-' + i + '" data-ai="' + i + '">' +
                     '<div class="cover">' +
-                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(cover) + '" ' +
+                        '<img referrerpolicy="no-referrer" loading="lazy" data-vid="' + esc(albumResults[albumResults.length-1].playlistId || '') + '" src="' + esc(cover) + '" ' +
                              'alt="Cover ' + esc(item.name) + '">' +
                     '</div>' +
                     '<div class="meta">' +
@@ -283,7 +324,7 @@
             var song = data[j];
             var artistName = song.artist || 'Various Artists';
             var albumName = song.album || '';
-            var cover = song.cover || '';
+            var cover = thumbLagu(song);   // thumbnail YouTube asli per videoId
 
             songResults.push({
                 videoId: song.videoId,
@@ -296,8 +337,8 @@
             Content.append(
                 '<article class="song card" data-q="' + j + '">' +
                     '<div class="cover">' +
-                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(cover) + '" ' +
-                             'alt="Cover ' + esc(song.title) + '">' +
+                        '<img referrerpolicy="no-referrer" loading="lazy" data-vid="' + esc(song.videoId) + '" src="' + esc(cover) + '" ' +
+                             'alt="Thumbnail ' + esc(song.title) + '">' +
                     '</div>' +
                     '<div class="info">' +
                         '<h3>' + esc(song.title) + '</h3>' +
@@ -554,6 +595,21 @@
     });
 
     // Klik di area hasil (pakai event delegation)
+    // Fallback thumbnail: semua img hasil render pakai handler error global
+    Content.on('error', 'img', function () {
+        pasangFallbackImg(this);
+        this.onerror = null; // cegah loop
+        var vid = this.getAttribute('data-vid');
+        if (vid && this.src.indexOf('i.ytimg.com') === -1) {
+            this.src = 'https://i.ytimg.com/vi/' + encodeURIComponent(vid) + '/mqdefault.jpg';
+        } else {
+            this.src = 'data:image/svg+xml,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240">' +
+                '<rect width="240" height="240" fill="#1a1c26"/>' +
+                '<text x="120" y="140" font-size="70" text-anchor="middle" fill="#6366f1">♪</text></svg>');
+        }
+    });
+
     Content.on('click', '.show-tracks', function () {
         openAlbum(parseInt($(this).attr('data-ai'), 10));
     });
