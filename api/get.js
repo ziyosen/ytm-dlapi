@@ -188,6 +188,66 @@ async function videoInfo(videoId) {
     throw terakhir || new Error('Video tidak bisa dibuka');
 }
 
+/* ====================== Mix / Radio queue (RD...) ========================
+   Playlist page YouTube TIDAK menyediakan isi playlist RD (Mix/Radio) —
+   scraping-nya selalu kosong. Cara resmi: internal API `next` YouTube
+   dengan playlistId + videoId acuan, yang mengembalikan antrean radio.
+   ========================================================================= */
+const NEXT_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+
+function cariDalam(obj, kunci, hasil) {
+    if (Array.isArray(obj)) {
+        for (const x of obj) cariDalam(x, kunci, hasil);
+    } else if (obj && typeof obj === 'object') {
+        for (const k of Object.keys(obj)) {
+            if (k === kunci) hasil.push(obj[k]);
+            else cariDalam(obj[k], kunci, hasil);
+        }
+    }
+}
+
+async function mixQueue(listId, videoId) {
+    const body = {
+        context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'id', gl: 'ID' } },
+        playlistId: listId
+    };
+    if (videoId) body.videoId = videoId;
+
+    const resp = await fetch('https://www.youtube.com/youtubei/v1/next?key=' + NEXT_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error('YouTube internal API: HTTP ' + resp.status);
+    const d = await resp.json();
+
+    const items = [];
+    cariDalam(d, 'playlistPanelVideoRenderer', items);
+
+    const tracks = [];
+    for (const it of items) {
+        if (!it.videoId) continue;
+        const title = (it.title && (it.title.simpleText ||
+            (it.title.runs || []).map(r => r.text).join(''))) || '';
+        const byline = it.longBylineText || it.shortBylineText || null;
+        const artist = byline && byline.runs ? (byline.runs[0] || {}).text || '' : '';
+        tracks.push({
+            videoId: it.videoId,
+            title: title,
+            artist: artist,
+            cover: 'https://i.ytimg.com/vi/' + it.videoId + '/mqdefault.jpg'
+        });
+    }
+
+    if (!tracks.length) throw new Error('Playlist kosong atau tidak bisa dibaca');
+    return {
+        name: 'Mix dari ' + (tracks[0].title || 'lagu'),
+        artist: '',
+        cover: tracks[0].cover,
+        tracks: tracks
+    };
+}
+
 /* ============================ Parsing link =============================== */
 function parseLink(raw) {
     const s = String(raw || '').trim();
@@ -245,11 +305,23 @@ router.get('/url', async function (req, res) {
     try {
         // Link playlist (termasuk link lagu yang punya &list=) -> pakai seluruh playlist
         if (p.listId) {
-            const pl = await scrapePlaylist(p.listId);
+            // RD... (Mix/Radio) tidak bisa di-scrape dari halaman playlist;
+            // ambil antreannya lewat internal API YouTube.
+            let pl;
             let startIndex = 0;
-            if (p.videoId) {
-                for (let i = 0; i < pl.tracks.length; i++) {
-                    if (pl.tracks[i].videoId === p.videoId) { startIndex = i; break; }
+            if (/^RD/.test(p.listId)) {
+                pl = await mixQueue(p.listId, p.videoId);
+                if (p.videoId) {
+                    for (let i = 0; i < pl.tracks.length; i++) {
+                        if (pl.tracks[i].videoId === p.videoId) { startIndex = i; break; }
+                    }
+                }
+            } else {
+                pl = await scrapePlaylist(p.listId);
+                if (p.videoId) {
+                    for (let i = 0; i < pl.tracks.length; i++) {
+                        if (pl.tracks[i].videoId === p.videoId) { startIndex = i; break; }
+                    }
                 }
             }
             return res.status(200).json({
