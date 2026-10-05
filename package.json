@@ -1,11 +1,12 @@
 {
   "name": "ytm-dlapi",
-  "version": "2.0.0",
-  "description": "YouTube Music streaming player on Express — ringan, tanpa ffmpeg",
+  "version": "3.0.0",
+  "description": "Pemutar musik YouTube (Express + yt-dlp) — streaming saja, tanpa ffmpeg",
   "main": "index.js",
   "repository": "https://github.com/ziyosen/ytm-dlapi.git",
   "license": "ISC",
   "scripts": {
+    "postinstall": "node scripts/fetch-ytdlp.js",
     "start": "node index.js",
     "dev": "node index.js"
   },
@@ -13,9 +14,8 @@
     "node": "20.x"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "axios": "^1.7.7",
     "express": "^4.18.2",
-    "ytmusic-api": "^4.1.0"
+    "ytmusic-api": "^5.3.1"
   }
 }
