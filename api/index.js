@@ -17,7 +17,11 @@ const stream = require('./stream.js');
 
 // path.join WAJIB dipakai supaya tidak ada '..' di dalam path.
 // res.sendFile menolak path yang mengandung '..' (403 Forbidden).
-const FRONTEND = path.join(__dirname, '..', 'example-frontend');
+//
+// Folder `public/` dipakai bersama:
+//   - Vercel menyajikannya otomatis sebagai file statis (halaman depan = /)
+//   - server lokal (node index.js) juga menyajikannya lewat express.static
+const FRONTEND = path.join(__dirname, '..', 'public');
 
 /* ------------------------------ Halaman depan ---------------------------- */
 app.get('/', (req, res) => {
