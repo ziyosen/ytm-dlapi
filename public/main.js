@@ -169,6 +169,42 @@
         updateBar(track);
         highlight();
         setMediaSession(track);
+        panaskanLaguBerikutnya(i);
+    }
+
+    /*
+      PREFETCH: minta server menyiapkan URL audio lagu berikutnya DI BELAKANG
+      LAYAR sementara lagu sekarang masih diputar. Resolve yt-dlp di Vercel
+      bisa 10-30 detik untuk lagu yang belum pernah diputar — dengan cara ini,
+      saat user tekan next / lagu habis, lagu berikutnya langsung nyala
+      karena URL-nya sudah tersimpan di cache server.
+    */
+    function panaskanLaguBerikutnya(i) {
+        var berikut = queue[i + 1];
+        if (!berikut || !berikut.videoId) return;
+        try {
+            // Range 0-1 byte: cukup untuk memicu resolve & cache di server,
+            // tanpa mengunduh audio-nya.
+            fetch(api('/api/stream/song/' + berikut.videoId + '?prefetch=1'),
+                { headers: { 'Range': 'bytes=0-1' } }).catch(function () {});
+        } catch (e) { /* diabaikan */ }
+    }
+
+    /* Panaskan beberapa lagu sekaligus (untuk playlist dari link) */
+    function panaskanBatch(mulai, jumlah) {
+        if (!queue.length) return;
+        for (var k = mulai; k < Math.min(mulai + jumlah, queue.length); k++) {
+            (function (idx) {
+                var t = queue[idx];
+                if (!t || !t.videoId) return;
+                setTimeout(function () {
+                    try {
+                        fetch(api('/api/stream/song/' + t.videoId + '?prefetch=1'),
+                            { headers: { 'Range': 'bytes=0-1' } }).catch(function () {});
+                    } catch (e) { /* diabaikan */ }
+                }, idx * 4000); // jeda 4 detik antar lagu biar tidak nge-ban server
+            })(k);
+        }
     }
 
     function nextTrack() {
@@ -527,6 +563,10 @@
                 setQueue(q, start, 'link');
                 setStatus('<b>' + q.length + '</b> lagu dari ' +
                     (d.name ? '"' + esc(d.name) + '"' : 'link') + ' — sedang diputar');
+
+                /* Link playlist: mulai panaskan lagu-lagu awal supaya tidak
+                   nunggu 30 detik saat user tekan next pertama kali. */
+                panaskanBatch(0, 3);
             })
             .catch(function (err) {
                 console.error('[Music Player]', err);
