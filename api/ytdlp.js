@@ -144,7 +144,7 @@ async function jalankan(args, timeoutMs) {
         const timer = setTimeout(function () {
             try { proc.kill('SIGKILL'); } catch (e) { /* diabaikan */ }
             reject(new Error('yt-dlp melebihi batas waktu'));
-        }, timeoutMs || 45000);
+        }, timeoutMs || 55000);
 
         proc.stdout.on('data', function (d) { out += d; });
         proc.stderr.on('data', function (d) { err += d; });
@@ -211,6 +211,7 @@ async function infoLagu(videoId, paksa, client) {
         artist: d.artist || d.uploader || d.channel || '',
         cover: d.thumbnail || '',
         duration: d.duration || 0,
+        size: d.filesize || d.filesize_approx || 0,
         url: d.url || ''
     };
 

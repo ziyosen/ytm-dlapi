@@ -27,19 +27,30 @@ async function ambilDariYouTube(url, range) {
     return fetch(url, { headers });
 }
 
-/* Kirim balasan ke browser */
-function teruskan(res, upstream) {
-    res.status(upstream.status);
-
-    const penting = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
-    for (let i = 0; i < penting.length; i++) {
-        const v = upstream.headers.get(penting[i]);
-        if (v) res.setHeader(penting[i], v);
-    }
-    if (!upstream.headers.get('content-type')) res.setHeader('Content-Type', 'audio/mp4');
+/* Kirim balasan ke browser (206 selalu, dengan Content-Range eksplisit) */
+function teruskan(res, upstream, mulai, akhir, totalUkuran) {
+    res.status(206);
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-store');
+
+    const panjang = akhir - mulai + 1;
+    if (totalUkuran && totalUkuran > 0) {
+        res.setHeader('Content-Range', 'bytes ' + mulai + '-' + akhir + '/' + totalUkuran);
+        res.setHeader('Content-Length', String(panjang));
+    } else {
+        /* Total tidak diketahui — pakai content-range dari googlevideo bila ada */
+        const cr = upstream.headers.get('content-range');
+        if (cr) res.setHeader('Content-Range', cr);
+        const cl = upstream.headers.get('content-length');
+        if (cl) res.setHeader('Content-Length', cl);
+    }
 }
+
+/* Ukuran segmen per request: 4 MB. Browser <audio> akan meminta segmen
+   berikutnya (Range) secara otomatis, jadi lagu berapapun panjangnya
+   tetap utuh sambil fungsi Vercel tidak pernah kena batas eksekusi. */
+const UKURAN_SEG = 4 * 1024 * 1024;
 
 router.get('/song/:videoId', async function (req, res) {
     const videoId = req.params.videoId;
@@ -48,6 +59,15 @@ router.get('/song/:videoId', async function (req, res) {
         return res.status(400).json({ error: 'videoId tidak valid' });
     }
 
+    /* ===== ALUR: SEGMENTED PROXY =====
+       googlevideo mengikat URL ke IP server yang me-resolve (ip= di URL),
+       jadi redirect langsung ke browser user selalu 403 → proxy WAJIB.
+       Tapi streaming penuh lewat 1 request memicu batas waktu fungsi
+       Vercel (maxDuration) → lagu mati di tengah.
+       Solusi: kita membalas HANYA segmen 4 MB per request dengan status
+       206 + Content-Range eksplisit. Browser <audio> otomatis meminta
+       segmen berikutnya (HTTP Range standar) → pemutaran tak terbatas.
+    */
     const range = req.headers.range;
 
     // Opsional: paksa player client tertentu, mis. ?client=android_vr
@@ -59,6 +79,21 @@ router.get('/song/:videoId', async function (req, res) {
     const klienCoba = client ? [client] : CLIENT_FALLBACK;
 
     try {
+        /* Tentukan potongan (segmen) yang diminta:
+           - Browser kirim "Range: bytes=A-B" → hormati.
+           - Tanpa Range → kita yang tentukan segmen 4 MB pertama, dan
+             setiap request berikutnya dari browser otomatis membawa Range
+             segmen berikutnya (standar HTTP untuk Accept-Ranges: bytes). */
+        let mulai = 0, akhir = 0;
+        let totalUkuran = null;
+        const m = /^bytes=(\d*)-(\d*)$/.exec(range || '');
+        if (m) {
+            if (m[1] !== '') mulai = parseInt(m[1], 10);
+            if (m[2] !== '') akhir = parseInt(m[2], 10);
+        } else {
+            akhir = mulai + UKURAN_SEG - 1; /* fallback: segmen pertama */
+        }
+
         let info = null;
         let upstream = null;
         let terakhirGagal = '';
@@ -67,13 +102,26 @@ router.get('/song/:videoId', async function (req, res) {
             const c = klienCoba[ci];
             try {
                 info = await infoLagu(videoId, false, c);
-                upstream = await ambilDariYouTube(info.url, range);
+                totalUkuran = info.size || null;
+
+                /* Tanpa Range dari browser: pilih sendiri segmen 4 MB */
+                if (!m) {
+                    akhir = mulai + UKURAN_SEG - 1;
+                }
+                /* Range open-ended ("bytes=0-") → clamp ke segmen 4 MB juga */
+                if (akhir <= 0 || akhir - mulai + 1 > UKURAN_SEG) {
+                    akhir = mulai + UKURAN_SEG - 1;
+                }
+                if (totalUkuran && akhir >= totalUkuran) akhir = totalUkuran - 1;
+
+                const rangeUpstream = 'bytes=' + mulai + '-' + akhir;
+                upstream = await ambilDariYouTube(info.url, rangeUpstream);
 
                 /* URL kedaluwarsa? ambil ulang tanpa cache */
                 if (upstream.status === 403 || upstream.status === 401) {
                     lupakan(videoId, c);
                     info = await infoLagu(videoId, true, c);
-                    upstream = await ambilDariYouTube(info.url, range);
+                    upstream = await ambilDariYouTube(info.url, rangeUpstream);
                 }
 
                 if (upstream.ok || upstream.status === 206) break;
@@ -91,11 +139,29 @@ router.get('/song/:videoId', async function (req, res) {
             });
         }
 
-        teruskan(res, upstream);
+        /* Total ukuran file: dari header Content-Range googlevideo (paling akurat) */
+        let total = totalUkuran || 0;
+        const crv = upstream.headers.get('content-range'); // contoh: bytes 0-4194303/5234567
+        if (crv) {
+            const t = /\/(\d+)$/.exec(crv.trim());
+            if (t) total = parseInt(t[1], 10);
+        }
+
+        teruskan(res, upstream, mulai, akhir, total);
 
         const body = Readable.fromWeb(upstream.body);
-        req.on('close', function () { try { body.destroy(); } catch (e) { /* diabaikan */ } });
-        body.on('error', function () { try { res.end(); } catch (e) { /* diabaikan */ } });
+        let selesai = false;
+
+        function tutupRapi() {
+            if (selesai) return;
+            selesai = true;
+            try { res.end(); } catch (e) { /* diabaikan */ }
+            try { body.destroy(); } catch (e) { /* diabaikan */ }
+        }
+
+        req.on('close', tutupRapi);
+        body.on('error', tutupRapi);
+        res.on('finish', function () { selesai = true; });
         body.pipe(res);
     } catch (err) {
         console.error('[stream] error:', err && err.message ? err.message : err);
