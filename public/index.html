@@ -30,8 +30,15 @@
                 </span>
                 <div class="brand-text">
                     <h1>Music Player</h1>
+                    <p class="brand-project">ZEINTHUB PROJECT</p>
                     <p>Putar lagu &amp; album dari YouTube Music</p>
                 </div>
+                <a class="tg-link" href="https://t.me/Bleszh" target="_blank" rel="noopener"
+                   title="Telegram Bleszh" aria-label="Buka Telegram Bleszh">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M21.94 4.6a1.6 1.6 0 0 0-1.65-.28L3.4 11.1a1.35 1.35 0 0 0 .07 2.53l3.6 1.13 1.4 4.46a1.05 1.05 0 0 0 1.72.44l2.03-1.9 3.62 2.66a1.35 1.35 0 0 0 2.11-.82l3.6-13.3a1.6 1.6 0 0 0-.61-1.7zM9.7 14.36l8.37-6.34c.2-.15.4.15.23.31l-6.6 6.17-.27 2.9-1.73-3.04z"/>
+                    </svg>
+                </a>
             </div>
         </header>
 
@@ -139,12 +146,49 @@
     <!-- Elemen audio (sumber diisi oleh main.js) -->
     <audio id="Audio" preload="none"></audio>
 
+    <!-- ===================== Now Playing (gaya YT Music) ===================== -->
+    <div class="np" id="NowPlaying" hidden>
+        <button type="button" class="np-close" id="NpClose" title="Tutup" aria-label="Tutup tampilan putar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="m18 6-12 12M6 6l12 12"/></svg>
+        </button>
+
+        <div class="np-body">
+            <div class="np-cover">
+                <img id="NpCover" alt="Cover lagu" src="" referrerpolicy="no-referrer">
+            </div>
+
+            <div class="np-meta">
+                <strong id="NpTitle">—</strong>
+                <span id="NpArtist">—</span>
+            </div>
+
+            <div class="np-seek">
+                <span id="NpCur">0:00</span>
+                <input type="range" id="NpSeek" min="0" max="1000" step="1" value="0" aria-label="Posisi lagu">
+                <span id="NpDur">0:00</span>
+            </div>
+
+            <div class="np-controls">
+                <button type="button" class="pbtn" id="NpPrev" title="Sebelumnya" aria-label="Sebelumnya">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2.2v14H6zM19 5v14L9.5 12z"/></svg>
+                </button>
+                <button type="button" class="pbtn main" id="NpPlay" title="Putar / Jeda" aria-label="Putar atau jeda">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12z"/></svg>
+                </button>
+                <button type="button" class="pbtn" id="NpNext" title="Berikutnya" aria-label="Berikutnya">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.8 5H18v14h-2.2zM5 5v14l9.5-7z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===================== Library ===================== -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"
             integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
             crossorigin="anonymous"></script>
 
     <!-- ===================== Logika aplikasi ===================== -->
-    <script src="main.js?v=3"></script>
+    <script src="main.js?v=4"></script>
 </body>
 </html>

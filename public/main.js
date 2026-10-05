@@ -165,8 +165,51 @@
         document.getElementById('PlayerCover').src = track.cover || '';
         document.getElementById('PlayerTitle').textContent = track.title || '—';
         document.getElementById('PlayerArtist').textContent = track.artist || '—';
+        // Sinkron ke tampilan Now Playing (fullscreen)
+        document.getElementById('NpCover').src = track.cover || '';
+        document.getElementById('NpTitle').textContent = track.title || '—';
+        document.getElementById('NpArtist').textContent = track.artist || '—';
+        // Lagu mulai diputar -> otomatis buka tampilan Now Playing
+        bukaNowPlaying(true);
         document.title = (track.title || 'Music Player') + ' — Music Player';
     }
+
+    /* ---------- Now Playing (gaya YT Music) ---------- */
+    var NpEl = document.getElementById('NowPlaying');
+    var NpSeekEl = document.getElementById('NpSeek');
+    var npDragging = false;
+
+    function bukaNowPlaying(buka) {
+        if (buka) {
+            NpEl.hidden = false;
+            requestAnimationFrame(function () { NpEl.classList.add('is-open'); });
+        } else {
+            NpEl.classList.remove('is-open');
+            setTimeout(function () { NpEl.hidden = true; }, 260);
+        }
+    }
+
+    document.getElementById('NpClose').addEventListener('click', function () { bukaNowPlaying(false); });
+    document.getElementById('NpPlay').addEventListener('click', togglePlay);
+    document.getElementById('NpPrev').addEventListener('click', prevTrack);
+    document.getElementById('NpNext').addEventListener('click', nextTrack);
+
+    // Klik cover/ judul di player bar kecil -> buka Now Playing juga
+    PlayerEl.addEventListener('click', function (e) {
+        if (e.target.closest('.pbtn') || e.target.closest('.player-seek') || e.target.closest('.player-vol')) return;
+        bukaNowPlaying(true);
+    });
+
+    NpSeekEl.addEventListener('input', function () {
+        npDragging = true;
+        var d = Audio.duration || 0;
+        if (d) document.getElementById('NpCur').textContent = fmtTime((NpSeekEl.value / 1000) * d);
+    });
+    NpSeekEl.addEventListener('change', function () {
+        var d = Audio.duration || 0;
+        if (d) Audio.currentTime = (NpSeekEl.value / 1000) * d;
+        npDragging = false;
+    });
 
     function highlight() {
         $('.is-playing').removeClass('is-playing');
@@ -577,11 +620,18 @@
     });
 
     // Kejadian audio
-    Audio.addEventListener('play', function () { PlayBtn.innerHTML = ICON_PAUSE; });
-    Audio.addEventListener('pause', function () { PlayBtn.innerHTML = ICON_PLAY; });
+    Audio.addEventListener('play', function () {
+        PlayBtn.innerHTML = ICON_PAUSE;
+        document.getElementById('NpPlay').innerHTML = ICON_PAUSE;
+    });
+    Audio.addEventListener('pause', function () {
+        PlayBtn.innerHTML = ICON_PLAY;
+        document.getElementById('NpPlay').innerHTML = ICON_PLAY;
+    });
 
     Audio.addEventListener('loadedmetadata', function () {
         document.getElementById('DurTime').textContent = fmtTime(Audio.duration);
+        document.getElementById('NpDur').textContent = fmtTime(Audio.duration);
     });
 
     Audio.addEventListener('timeupdate', function () {
@@ -589,6 +639,10 @@
         if (!dragging && d) {
             SeekEl.value = (Audio.currentTime / d) * 1000;
             document.getElementById('CurTime').textContent = fmtTime(Audio.currentTime);
+        }
+        if (!npDragging && d) {
+            NpSeekEl.value = (Audio.currentTime / d) * 1000;
+            document.getElementById('NpCur').textContent = fmtTime(Audio.currentTime);
         }
     });
 
