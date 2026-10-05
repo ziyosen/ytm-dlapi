@@ -48,15 +48,19 @@ router.get('/song/:videoId', async function (req, res) {
 
     const range = req.headers.range;
 
+    // Opsional: paksa player client tertentu, mis. ?client=android_vr
+    // Berguna kalau IP server diblokir YouTube.
+    const client = typeof req.query.client === 'string' ? req.query.client : '';
+
     try {
         /* --- percobaan pertama (pakai cache) --- */
-        let info = await infoLagu(videoId);
+        let info = await infoLagu(videoId, false, client);
         let upstream = await ambilDariYouTube(info.url, range);
 
         /* --- URL kedaluwarsa? ambil ulang tanpa cache, coba sekali lagi --- */
         if (upstream.status === 403 || upstream.status === 401) {
-            lupakan(videoId);
-            info = await infoLagu(videoId, true);
+            lupakan(videoId, client);
+            info = await infoLagu(videoId, true, client);
             upstream = await ambilDariYouTube(info.url, range);
         }
 
