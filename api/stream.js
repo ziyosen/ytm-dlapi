@@ -107,4 +107,20 @@ router.get('/song/:videoId', async function (req, res) {
     }
 });
 
+/* ---- Siapkan lagu (resolve URL saja, tanpa download audio) ----
+   Dipakai front-end untuk prefetch: memanggil ini mengisi cache server
+   sehingga pemutaran berikutnya langsung nyala. */
+router.get('/prepare/:videoId', async function (req, res) {
+    const videoId = req.params.videoId;
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        return res.status(400).json({ error: 'videoId tidak valid' });
+    }
+    try {
+        const info = await infoLagu(videoId, false, req.query.client || '');
+        res.status(200).json({ ok: true, videoId: videoId, title: info.title });
+    } catch (err) {
+        res.status(502).json({ ok: false, error: (err && err.message) || String(err) });
+    }
+});
+
 module.exports = router;

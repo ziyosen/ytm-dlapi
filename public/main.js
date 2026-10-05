@@ -169,7 +169,41 @@
         updateBar(track);
         highlight();
         setMediaSession(track);
+        renderQueue();
         panaskanLaguBerikutnya(i);
+    }
+
+    /* ==================== ANTREAN (queue ala YT Music) ==================== */
+    function renderQueue() {
+        var wadah = document.getElementById('NpQueue');
+        if (!wadah) return;
+
+        if (!queue.length) {
+            wadah.innerHTML = '<p class="q-kosong">Antrean kosong</p>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < queue.length; i++) {
+            var t = queue[i];
+            var aktif = (i === qIndex);
+            html +=
+                '<div class="q-item' + (aktif ? ' is-now' : '') + '" data-q="' + i + '" role="button" tabindex="0">' +
+                    '<span class="q-no">' + (aktif ? '▶' : ('0' + (i + 1)).slice(-2)) + '</span>' +
+                    '<img class="q-thumb" referrerpolicy="no-referrer" loading="lazy" ' +
+                         'data-vid="' + esc(t.videoId) + '" ' +
+                         'src="https://i.ytimg.com/vi/' + esc(t.videoId) + '/mqdefault.jpg" alt="">' +
+                    '<span class="q-meta">' +
+                        '<strong>' + esc(t.title || '—') + '</strong>' +
+                        '<em>' + esc(t.artist || '') + '</em>' +
+                    '</span>' +
+                '</div>';
+        }
+        wadah.innerHTML = html;
+
+        // Gulir ke lagu aktif
+        var aktifEl = wadah.querySelector('.q-item.is-now');
+        if (aktifEl) aktifEl.scrollIntoView({ block: 'nearest' });
     }
 
     /*
@@ -183,10 +217,10 @@
         var berikut = queue[i + 1];
         if (!berikut || !berikut.videoId) return;
         try {
-            // Range 0-1 byte: cukup untuk memicu resolve & cache di server,
-            // tanpa mengunduh audio-nya.
-            fetch(api('/api/stream/song/' + berikut.videoId + '?prefetch=1'),
-                { headers: { 'Range': 'bytes=0-1' } }).catch(function () {});
+            // Endpoint khusus: resolve URL saja (tanpa download audio) —
+            // lebih cepat & hemat daripada request Range ke stream penuh.
+            fetch(api('/api/stream/prepare/' + berikut.videoId))
+                .catch(function () {});
         } catch (e) { /* diabaikan */ }
     }
 
@@ -199,8 +233,8 @@
                 if (!t || !t.videoId) return;
                 setTimeout(function () {
                     try {
-                        fetch(api('/api/stream/song/' + t.videoId + '?prefetch=1'),
-                            { headers: { 'Range': 'bytes=0-1' } }).catch(function () {});
+                        fetch(api('/api/stream/prepare/' + t.videoId))
+                            .catch(function () {});
                     } catch (e) { /* diabaikan */ }
                 }, idx * 4000); // jeda 4 detik antar lagu biar tidak nge-ban server
             })(k);
@@ -283,6 +317,19 @@
         var d = Audio.duration || 0;
         if (d) Audio.currentTime = (NpSeekEl.value / 1000) * d;
         npDragging = false;
+    });
+
+    // Klik item antrean -> putar lagu itu
+    document.getElementById('NpQueue').addEventListener('click', function (e) {
+        var item = e.target.closest('.q-item');
+        if (!item) return;
+        var i = parseInt(item.getAttribute('data-q'), 10);
+        if (isNaN(i)) return;
+        if (qSource === 'link' || qSource === 'songs') {
+            playAt(i);
+        } else {
+            playAt(i); // antrean sudah flat: nomor = posisi queue
+        }
     });
 
     function highlight() {

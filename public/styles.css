@@ -885,3 +885,98 @@ input[type="range"]::-moz-range-thumb {
     .np-controls { gap: 20px; }
     .np-controls .pbtn.main { width: 60px; height: 60px; }
 }
+
+/* ======================= Antrean lagu (queue) ============================ */
+.np-queue {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 16px;
+    margin-top: 8px;
+}
+
+.np-queue h4 {
+    margin: 0 0 10px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.q-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.q-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 8px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+.q-item:hover { background: rgba(255, 255, 255, 0.06); }
+
+.q-no {
+    flex: 0 0 auto;
+    min-width: 22px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted-2);
+    text-align: center;
+}
+
+.q-thumb {
+    flex: 0 0 auto;
+    width: 42px; height: 42px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--surface-2);
+}
+
+.q-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.q-meta strong {
+    font-size: 0.86rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.q-meta em {
+    font-style: normal;
+    font-size: 0.74rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.q-item.is-now {
+    background: rgba(99, 102, 241, 0.16);
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
+}
+
+.q-item.is-now .q-no { color: var(--primary-3); }
+.q-item.is-now .q-meta strong { color: #fff; }
+
+.q-kosong {
+    margin: 0;
+    padding: 18px 8px;
+    text-align: center;
+    font-size: 0.84rem;
+    color: var(--muted-2);
+}
