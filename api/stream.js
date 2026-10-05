@@ -104,6 +104,12 @@ router.get('/song/:videoId', async function (req, res) {
                 info = await infoLagu(videoId, false, c);
                 totalUkuran = info.size || null;
 
+                /* Minta offset di luar ukuran file? Balas 416 eksplisit
+                   (standar HTTP) — bukan 502, supaya player tahu audio habis */
+                if (totalUkuran && mulai >= totalUkuran) {
+                    return res.status(416).json({ error: 'Range di luar ukuran audio' });
+                }
+
                 /* Tanpa Range dari browser: pilih sendiri segmen 4 MB */
                 if (!m) {
                     akhir = mulai + UKURAN_SEG - 1;
