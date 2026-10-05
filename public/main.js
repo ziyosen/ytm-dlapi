@@ -174,6 +174,7 @@
         setMediaSession(track);
         renderQueue();
         panaskanLaguBerikutnya(i);
+        panaskanSatu(i + 2); // siapkan 2 lagu di depan lebih awal
     }
 
     /* ==================== ANTREAN (queue ala YT Music) ==================== */
@@ -233,18 +234,42 @@
     function panaskanBatch(mulai, jumlah) {
         if (!queue.length) return;
         var akhir = Math.min(mulai + jumlah, queue.length);
+
+        /* Susun urutan: lagu aktif dulu, lalu setelahnya berurutan —
+           supaya lagu yang mau diputar pasti paling awal disiapkan. */
+        var daftar = [];
         for (var k = mulai; k < akhir; k++) {
-            (function (idx) {
-                var t = queue[idx];
-                if (!t || !t.videoId) return;
-                setTimeout(function () {
-                    try {
-                        fetch(api('/api/stream/prepare/' + t.videoId))
-                            .catch(function () {});
-                    } catch (e) { /* diabaikan */ }
-                }, (idx - mulai) * 2500); // jeda 2,5 detik antar lagu biar tidak nge-ban server
-            })(k);
+            if (k !== qIndex) daftar.push(k);
         }
+
+        /* Paralel terbatas (4 sekaligus, tanpa jeda) — semua lagu dari link
+           selesai disiapkan dalam ~1 menit, bukan 2,5 detik per lagu.
+           Kalau ada yang gagal, dicoba ulang 1x di belakang layar. */
+        var PALAK = 4, iikut = 0;
+        function kerjakan() {
+            if (iikut >= daftar.length) return;
+            var idx = daftar[iikut++];
+            var t = queue[idx];
+            if (!t || !t.videoId) { kerjakan(); return; }
+            fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
+                .then(function (r) {
+                    if (!r.ok) {
+                        /* gagal -> ulang 1x */
+                        return fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
+                            .catch(function () {});
+                    }
+                })
+                .catch(function () {})
+                .then(function () { kerjakan(); }); // lanjut lagu berikutnya
+        }
+        for (var j = 0; j < PALAK; j++) kerjakan();
+    }
+
+    /* Panaskan 1 lagu (dipakai saat lagu aktif berganti) */
+    function panaskanSatu(idx) {
+        var t = queue[idx];
+        if (!t || !t.videoId) return;
+        fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now())).catch(function () {});
     }
 
     function nextTrack() {
@@ -834,6 +859,8 @@
         retryCount = 0;
         if (errStreak <= 3 && qIndex + 1 < queue.length) {
             setStatus('Lagu ini gagal diputar — lanjut ke lagu berikutnya…');
+            panaskanSatu(qIndex + 1); // panaskan dulu lagu berikutnya biar tidak skip lagi
+            panaskanSatu(qIndex + 2);
             setTimeout(nextTrack, 1200);
         } else {
             setStatus('<b>Gagal</b> memutar lagu ini. Coba lagu lain ya.');
