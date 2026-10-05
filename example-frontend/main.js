@@ -202,22 +202,22 @@
 
         for (var i = 0; i < data.length; i++) {
             var item = data[i];
-            var artist = (item.artists && item.artists.length) ? item.artists[0].name : 'Various Artists';
-            var small = (item.thumbnails && item.thumbnails.length) ? item.thumbnails[0].url : '';
-            var big = bestCover(item.thumbnails, small);
+            var artist = item.artist || 'Various Artists';
+            var cover = item.cover || '';
 
             albumResults.push({
-                playlistId: item.playlistId,
+                albumId: item.albumId || '',
+                playlistId: item.playlistId || '',
                 artist: artist,
                 name: item.name,
                 year: item.year,
-                cover: big
+                cover: cover
             });
 
             Content.append(
                 '<article class="album card" id="album-' + i + '" data-ai="' + i + '">' +
                     '<div class="cover">' +
-                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(small) + '" ' +
+                        '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(cover) + '" ' +
                              'alt="Cover ' + esc(item.name) + '">' +
                     '</div>' +
                     '<div class="meta">' +
@@ -238,13 +238,13 @@
 
         for (var j = 0; j < data.length; j++) {
             var song = data[j];
-            var artistName = (song.artists && song.artists.length) ? song.artists[0].name : 'Various Artists';
-            var albumName = (song.album && song.album.name) ? song.album.name : '';
-            var cover = bestCover(song.thumbnails, '');
+            var artistName = song.artist || 'Various Artists';
+            var albumName = song.album || '';
+            var cover = song.cover || '';
 
             songResults.push({
                 videoId: song.videoId,
-                title: song.name,
+                title: song.title,
                 artist: artistName,
                 album: albumName,
                 cover: cover
@@ -254,10 +254,10 @@
                 '<article class="song card" data-q="' + j + '">' +
                     '<div class="cover">' +
                         '<img referrerpolicy="no-referrer" loading="lazy" src="' + esc(cover) + '" ' +
-                             'alt="Cover ' + esc(song.name) + '">' +
+                             'alt="Cover ' + esc(song.title) + '">' +
                     '</div>' +
                     '<div class="info">' +
-                        '<h3>' + esc(song.name) + '</h3>' +
+                        '<h3>' + esc(song.title) + '</h3>' +
                         '<p>' + esc(artistName) + (albumName ? ' · ' + esc(albumName) : '') + '</p>' +
                     '</div>' +
                     '<div class="actions">' +
@@ -286,10 +286,12 @@
 
         setStatus('Memuat daftar track…');
 
-        fetch(api('/api/get/album/playlist/' + album.playlistId))
+        fetch(api('/api/get/album/songs/' + (album.albumId || album.playlistId)))
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (!Array.isArray(data) || !data.length) {
+                var tracks = (data && data.tracks) ? data.tracks : [];
+
+                if (!tracks.length) {
                     setStatus('Album ini tidak punya track yang bisa diputar.');
                     return;
                 }
@@ -297,12 +299,9 @@
                 var list = [];
                 var rows = '';
 
-                for (var i = 0; i < data.length; i++) {
-                    var node = data[i].playlistVideoRenderer;
-                    if (!node) continue;
-
-                    var title = node.title.runs[0].text;
-                    var videoId = node.videoId;
+                for (var i = 0; i < tracks.length; i++) {
+                    var title = tracks[i].title;
+                    var videoId = tracks[i].videoId;
                     var qi = list.length;
 
                     list.push({ videoId: videoId, title: title });
@@ -352,11 +351,117 @@
         setQueue(songResults, qi, 'songs');
     }
 
-    /* ============================ 8) PENCARIAN =========================== */
+    /* ======================= 8) BUKA LINK YOUTUBE ======================== */
+    function looksLikeLink(q) {
+        if (/youtu\.?be/i.test(q)) return true;
+        if (/^https?:\/\//i.test(q)) return true;
+        if (/^(PL|RD|OLAK5uy_|UU|FL|LL|WL|MPREb_)[A-Za-z0-9_-]{8,}$/.test(q)) return true;
+        return false;
+    }
+
+    function renderLinkTracks(d, q) {
+        resetContent('');
+
+        var cover = d.cover
+            ? '<div class="cover"><img referrerpolicy="no-referrer" src="' + esc(d.cover) + '" alt=""></div>'
+            : '<div class="cover" style="display:flex;align-items:center;justify-content:center;' +
+              'background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:30px">♪</div>';
+
+        var rows = '';
+        for (var i = 0; i < q.length; i++) {
+            rows +=
+                '<div class="track" data-ai="link" data-q="' + i + '" role="button" tabindex="0">' +
+                    '<span class="track-no">' + ('0' + (i + 1)).slice(-2) + '</span>' +
+                    '<span class="track-title">' + esc(q[i].title) + '</span>' +
+                    '<span class="track-play" aria-hidden="true">' +
+                        '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12z"/></svg>' +
+                    '</span>' +
+                '</div>';
+        }
+
+        Content.append(
+            '<article class="album card is-open">' +
+                cover +
+                '<div class="meta">' +
+                    '<h3>' + esc(d.name || 'Playlist dari link') + '</h3>' +
+                    '<p class="by">' + q.length + ' lagu · dari link</p>' +
+                '</div>' +
+                '<div class="album-panel">' +
+                    '<div class="tracklist">' + rows + '</div>' +
+                '</div>' +
+            '</article>'
+        );
+    }
+
+    function bukaLink(query) {
+        resetContent('');
+        showLoading('Membuka link…');
+        setStatus('Membaca link…');
+
+        fetch(api('/api/get/url?url=' + encodeURIComponent(query)))
+            .then(function (r) {
+                return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+            })
+            .then(function (hasil) {
+                var d = hasil.d;
+                if (!hasil.ok || !d || d.error) {
+                    throw new Error((d && d.error) || 'Link tidak bisa dibuka');
+                }
+
+                /* --- satu lagu --- */
+                if (d.type === 'song') {
+                    var satu = [{
+                        videoId: d.track.videoId,
+                        title: d.track.title,
+                        artist: d.track.artist,
+                        cover: d.track.cover
+                    }];
+                    resetContent('');
+                    showEmpty('Memutar dari link', esc(d.track.title));
+                    setQueue(satu, 0, 'link');
+                    setStatus('<b>1</b> lagu diputar dari link');
+                    return;
+                }
+
+                /* --- playlist / album --- */
+                var tracks = d.tracks || [];
+                if (!tracks.length) throw new Error('Playlist ini kosong');
+
+                var q = tracks.map(function (t) {
+                    return {
+                        videoId: t.videoId,
+                        title: t.title,
+                        artist: t.artist || d.artist || '',
+                        cover: t.cover || d.cover || ''
+                    };
+                });
+
+                var start = parseInt(d.startIndex, 10) || 0;
+                if (start < 0 || start >= q.length) start = 0;
+
+                renderLinkTracks(d, q);
+                setQueue(q, start, 'link');
+                setStatus('<b>' + q.length + '</b> lagu dari ' +
+                    (d.name ? '"' + esc(d.name) + '"' : 'link') + ' — sedang diputar');
+            })
+            .catch(function (err) {
+                console.error('[Music Player]', err);
+                showEmpty('Link tidak bisa dibuka', esc(err.message || 'Coba link lain.'));
+                setStatus('<b>Gagal</b> membaca link.');
+            });
+    }
+
+    /* ============================ 9) PENCARIAN =========================== */
     function doSearch() {
         var query = (SearchBox.val() || '').trim();
         if (!query) {
             SearchBox.trigger('focus');
+            return;
+        }
+
+        /* Kalau yang ditempel sebuah link -> langsung putar */
+        if (looksLikeLink(query)) {
+            bukaLink(query);
             return;
         }
 
@@ -381,7 +486,7 @@
             .catch(showError);
     }
 
-    /* ============================ 9) EVENT =============================== */
+    /* ============================ 10) EVENT ============================== */
     // Pencarian
     SearchBox.on('keyup', function (e) {
         if (e.keyCode === 13 || e.key === 'Enter') {
@@ -421,14 +526,22 @@
     });
 
     Content.on('click', '.track', function () {
-        var ai = parseInt($(this).attr('data-ai'), 10);
+        var aiRaw = $(this).attr('data-ai');
         var qi = parseInt($(this).attr('data-q'), 10);
+
         // Klik lagu yang sedang diputar -> jeda / lanjut
-        if (qSource === ai && qIndex === qi && Audio.src) {
+        if (qSource === aiRaw && qIndex === qi && Audio.src) {
             togglePlay();
             return;
         }
-        playFromAlbum(ai, qi);
+
+        // Daftar dari link: queue-nya sudah terisi
+        if (aiRaw === 'link') {
+            playAt(qi);
+            return;
+        }
+
+        playFromAlbum(parseInt(aiRaw, 10), qi);
     });
 
     Content.on('click', '.song', function () {
