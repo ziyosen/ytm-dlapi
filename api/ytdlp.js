@@ -8,6 +8,9 @@
      1. Menyiapkan binary yt-dlp (PATH -> /tmp -> bawaan repo -> unduh).
      2. Mengambil metadata + URL audio sebuah video (dengan cache).
    ========================================================================== */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const URL_BIN = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
