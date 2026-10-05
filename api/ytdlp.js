@@ -35,7 +35,21 @@ function cookiesFile() {
     }
     if (COOKIES_ENV.trim()) {
         const tujuan = path.join(os.tmpdir(), 'yt-dlp-cookies.txt');
-        fs.writeFileSync(tujuan, COOKIES_ENV.replace(/\\n/g, '\n'), { mode: 0o600 });
+        let isi = COOKIES_ENV.replace(/\\n/g, '\n').trim();
+        // Dukung 2 format: cookies.txt Netscape, ATAU header "k=v; k2=v2" dari
+        // "Copy as cookies" browser — konversi otomatis ke Netscape.
+        if (!isi.startsWith('# ') && isi.includes('=') && !isi.includes('\t')) {
+            const baris = isi.split(';').map(function (pasang) {
+                const i = pasang.indexOf('=');
+                if (i < 1) return null;
+                const nama = pasang.slice(0, i).trim();
+                const nilai = pasang.slice(i + 1).trim();
+                // domain  includeSubdomain  path  secure  expiry  name  value
+                return ['.youtube.com', 'TRUE', '/', 'TRUE', '0', nama, nilai].join('\t');
+            }).filter(Boolean).join('\n');
+            isi = '# Netscape HTTP Cookie File\n' + baris + '\n';
+        }
+        fs.writeFileSync(tujuan, isi, { mode: 0o600 });
         cookiesFileCache = tujuan;
         return cookiesFileCache;
     }
