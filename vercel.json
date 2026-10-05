@@ -5,10 +5,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": [
-        "example-frontend/**",
-        "bin/**"
-      ]
+      "includeFiles": "{example-frontend,bin}/**"
     }
   },
   "rewrites": [
