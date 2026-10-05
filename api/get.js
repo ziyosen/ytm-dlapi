@@ -167,14 +167,25 @@ async function albumInfo(albumId) {
 
 /* ============================== Satu video =============================== */
 async function videoInfo(videoId) {
-    const d = await infoLagu(videoId);
-    return {
-        videoId: d.videoId,
-        title: d.title,
-        artist: d.artist,
-        cover: d.cover,
-        duration: d.duration
-    };
+    // Coba beberapa player client — kalau satu diblokir ("Sign in to
+    // confirm you're not a bot"), client lain kadang masih lolos.
+    const CLIENTS = ['', 'tv', 'android_vr', 'mweb'];
+    let terakhir = null;
+    for (const c of CLIENTS) {
+        try {
+            const d = await infoLagu(videoId, false, c);
+            return {
+                videoId: d.videoId,
+                title: d.title,
+                artist: d.artist,
+                cover: d.cover,
+                duration: d.duration
+            };
+        } catch (e) {
+            terakhir = e;
+        }
+    }
+    throw terakhir || new Error('Video tidak bisa dibuka');
 }
 
 /* ============================ Parsing link =============================== */
@@ -268,7 +279,12 @@ router.get('/url', async function (req, res) {
         const t = await videoInfo(p.videoId);
         return res.status(200).json({ type: 'song', track: t });
     } catch (err) {
-        res.status(404).json({ error: 'Gagal membuka link: ' + (err.message || err) });
+        const pesan = String((err && err.message) || err);
+        let tambahan = '';
+        if (/Sign in to confirm|not a bot/i.test(pesan)) {
+            tambahan = ' — Server diblokir YouTube (IP datacenter). Pemilik server perlu mengisi env var YTDLP_COOKIES dengan cookies.txt akun Google.';
+        }
+        res.status(404).json({ error: 'Gagal membuka link: ' + pesan + tambahan });
     }
 });
 

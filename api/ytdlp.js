@@ -8,24 +8,54 @@
      1. Menyiapkan binary yt-dlp (PATH -> /tmp -> bawaan repo -> unduh).
      2. Mengambil metadata + URL audio sebuah video (dengan cache).
    ========================================================================== */
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const URL_BIN = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
+
+/*
+  Dukungan cookies & proxy (WAJIB di Vercel):
+  YouTube memblokir IP datacenter (Vercel dsb.) dengan "Sign in to confirm
+  you're not a bot". Solusi resmi yt-dlp: cookies.txt dari akun Google yang
+  sudah login. Isi env var YTDLP_COOKIES dengan isi cookies.txt (atau
+  YTDLP_COOKIES_FILE = path file), dan opsional YTDLP_PROXY.
+*/
+const COOKIES_ENV = process.env.YTDLP_COOKIES || '';
+const COOKIES_FILE_ENV = process.env.YTDLP_COOKIES_FILE || '';
+const PROXY_ENV = process.env.YTDLP_PROXY || '';
+
+let cookiesFileCache = null;
+function cookiesFile() {
+    if (cookiesFileCache) return cookiesFileCache;
+    if (COOKIES_FILE_ENV && fs.existsSync(COOKIES_FILE_ENV)) {
+        cookiesFileCache = COOKIES_FILE_ENV;
+        return cookiesFileCache;
+    }
+    if (COOKIES_ENV.trim()) {
+        const tujuan = path.join(os.tmpdir(), 'yt-dlp-cookies.txt');
+        fs.writeFileSync(tujuan, COOKIES_ENV.replace(/\\n/g, '\n'), { mode: 0o600 });
+        cookiesFileCache = tujuan;
+        return cookiesFileCache;
+    }
+    return null;
+}
 const BAWAAN = path.join(__dirname, '..', 'bin', 'yt-dlp');
 const TMP_BIN = path.join(os.tmpdir(), 'yt-dlp-bin');
 
 /* Argumen dasar: tanpa cache, tanpa playlist, timeout wajar */
-const ARGS_DASAR = [
-    '--no-warnings',
-    '--no-playlist',
-    '--no-cache-dir',
-    '--socket-timeout', '20',
-    '--retries', '2',
-    '--extractor-retries', '2'
-];
+function argsDasar() {
+    const a = [
+        '--no-warnings',
+        '--no-playlist',
+        '--no-cache-dir',
+        '--socket-timeout', '20',
+        '--retries', '2',
+        '--extractor-retries', '2'
+    ];
+    const cf = cookiesFile();
+    if (cf) { a.push('--cookies', cf); }
+    if (PROXY_ENV) { a.push('--proxy', PROXY_ENV); }
+    return a;
+}
 
 /* ============================ 1) Binary yt-dlp =========================== */
 
@@ -140,7 +170,7 @@ async function infoLagu(videoId, paksa, client) {
     if (client) tambahan.push('--extractor-args', 'youtube:player_client=' + client);
 
     const out = await jalankan(
-        ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(ARGS_DASAR, tambahan, [
+        ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(argsDasar(), tambahan, [
             'https://www.youtube.com/watch?v=' + videoId
         ])
     );

@@ -52,21 +52,40 @@ router.get('/song/:videoId', async function (req, res) {
     // Berguna kalau IP server diblokir YouTube.
     const client = typeof req.query.client === 'string' ? req.query.client : '';
 
-    try {
-        /* --- percobaan pertama (pakai cache) --- */
-        let info = await infoLagu(videoId, false, client);
-        let upstream = await ambilDariYouTube(info.url, range);
+    // Daftar player client yang dicoba berurutan kalau satu gagal
+    const CLIENT_FALLBACK = ['', 'tv', 'android_vr', 'mweb'];
+    const klienCoba = client ? [client] : CLIENT_FALLBACK;
 
-        /* --- URL kedaluwarsa? ambil ulang tanpa cache, coba sekali lagi --- */
-        if (upstream.status === 403 || upstream.status === 401) {
-            lupakan(videoId, client);
-            info = await infoLagu(videoId, true, client);
-            upstream = await ambilDariYouTube(info.url, range);
+    try {
+        let info = null;
+        let upstream = null;
+        let terakhirGagal = '';
+
+        for (let ci = 0; ci < klienCoba.length; ci++) {
+            const c = klienCoba[ci];
+            try {
+                info = await infoLagu(videoId, false, c);
+                upstream = await ambilDariYouTube(info.url, range);
+
+                /* URL kedaluwarsa? ambil ulang tanpa cache */
+                if (upstream.status === 403 || upstream.status === 401) {
+                    lupakan(videoId, c);
+                    info = await infoLagu(videoId, true, c);
+                    upstream = await ambilDariYouTube(info.url, range);
+                }
+
+                if (upstream.ok || upstream.status === 206) break;
+                terakhirGagal = 'HTTP ' + upstream.status;
+            } catch (e) {
+                terakhirGagal = e.message || String(e);
+                info = null; upstream = null;
+            }
         }
 
-        if (!upstream.ok && upstream.status !== 206) {
+        if (!upstream || (!upstream.ok && upstream.status !== 206)) {
             return res.status(502).json({
-                error: 'Server audio YouTube menolak (HTTP ' + upstream.status + ')'
+                error: 'Server audio YouTube menolak' + (terakhirGagal ? ' (' + terakhirGagal + ')' : '') +
+                       '. Kalau ini di Vercel, set env var YTDLP_COOKIES (cookies.txt akun Google).'
             });
         }
 

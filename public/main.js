@@ -120,6 +120,7 @@
 
         qIndex = i;
         errStreak = 0;
+        retryCount = 0;
 
         var track = queue[i];
         Audio.src = api('/api/stream/song/' + track.videoId);
@@ -596,18 +597,47 @@
         nextTrack();
     });
 
-    // Kalau satu lagu gagal diputar, coba lompat ke berikutnya (maks 3 kali)
+    /*
+      Kalau lagu gagal diputar: JANGAN langsung lompat ke lagu berikutnya
+      (dulu ini penyebab "lagu pindah sendiri"). Urutannya:
+        1. Coba muat ulang lagu yang sama (retry, maks 2x) — sering kali
+           hanya URL-nya yang kedaluwarsa.
+        2. Kalau masih gagal juga, baru lanjut ke lagu berikutnya.
+    */
+    var retryCount = 0; // retry untuk lagu yang sedang diputar
+
     Audio.addEventListener('error', function () {
         if (!Audio.src) return;
         errStreak++;
-        console.warn('[Music Player] gagal memutar lagu ke-' + (qIndex + 1));
+        console.warn('[Music Player] gagal memutar lagu ke-' + (qIndex + 1), 'percobaan:', retryCount + 1);
 
+        if (retryCount < 2) {
+            retryCount++;
+            setStatus('Koneksi lagu terputus — mencoba lagi… (' + retryCount + '/2)');
+            var track = queue[qIndex];
+            var pos = Audio.currentTime || 0;
+            // cache-bypass: tambahkan query unik supaya browser tidak pakai cache rusak
+            Audio.src = api('/api/stream/song/' + track.videoId) + '?r=' + Date.now();
+            Audio.load();
+            var p = Audio.play();
+            if (p && p.catch) p.catch(function () {});
+            if (pos > 3) { try { Audio.currentTime = pos; } catch (e) {} }
+            return;
+        }
+
+        retryCount = 0;
         if (errStreak <= 3 && qIndex + 1 < queue.length) {
             setStatus('Lagu ini gagal diputar — lanjut ke lagu berikutnya…');
             setTimeout(nextTrack, 1200);
         } else {
             setStatus('<b>Gagal</b> memutar lagu ini. Coba lagu lain ya.');
         }
+    });
+
+    // Sukses mulai memutar -> reset retry & error streak
+    Audio.addEventListener('playing', function () {
+        retryCount = 0;
+        errStreak = 0;
     });
 
     // Ekspos beberapa fungsi (untuk debugging di console)
