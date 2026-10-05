@@ -156,6 +156,9 @@
         retryCount = 0;
 
         var track = queue[i];
+        // Server me-redirect ke googlevideo (audio langsung dari YouTube).
+        // <audio> mengikuti redirect otomatis. Kalau gagal (403 dsb) ->
+        // handler 'error' mencoba lagi dengan ?proxy=1 (lewat server).
         Audio.src = api('/api/stream/song/' + track.videoId);
         Audio.load();
 
@@ -224,10 +227,13 @@
         } catch (e) { /* diabaikan */ }
     }
 
-    /* Panaskan beberapa lagu sekaligus (untuk playlist dari link) */
+    /* Panaskan BANYAK lagu sekaligus (untuk playlist/mix dari link):
+       semua lagu di link langsung disiapkan di belakang layar sebelum
+       diputar, jadi kapan pun user next/klik lagu manapun, sudah siap. */
     function panaskanBatch(mulai, jumlah) {
         if (!queue.length) return;
-        for (var k = mulai; k < Math.min(mulai + jumlah, queue.length); k++) {
+        var akhir = Math.min(mulai + jumlah, queue.length);
+        for (var k = mulai; k < akhir; k++) {
             (function (idx) {
                 var t = queue[idx];
                 if (!t || !t.videoId) return;
@@ -236,7 +242,7 @@
                         fetch(api('/api/stream/prepare/' + t.videoId))
                             .catch(function () {});
                     } catch (e) { /* diabaikan */ }
-                }, idx * 4000); // jeda 4 detik antar lagu biar tidak nge-ban server
+                }, (idx - mulai) * 2500); // jeda 2,5 detik antar lagu biar tidak nge-ban server
             })(k);
         }
     }
@@ -613,7 +619,7 @@
 
                 /* Link playlist: mulai panaskan lagu-lagu awal supaya tidak
                    nunggu 30 detik saat user tekan next pertama kali. */
-                panaskanBatch(0, 3);
+                panaskanBatch(0, 999); // siapkan SEMUA lagu di link otomatis
             })
             .catch(function (err) {
                 console.error('[Music Player]', err);
@@ -809,11 +815,15 @@
 
         if (retryCount < 2) {
             retryCount++;
+            // Percobaan 1: masih redirect biasa (URL mungkin kedaluwarsa).
+            // Percobaan 2: paksa lewat server (?proxy=1) — googlevideo
+            // kadang menolak UA/headers browser tertentu.
             setStatus('Koneksi lagu terputus — mencoba lagi… (' + retryCount + '/2)');
             var track = queue[qIndex];
             var pos = Audio.currentTime || 0;
-            // cache-bypass: tambahkan query unik supaya browser tidak pakai cache rusak
-            Audio.src = api('/api/stream/song/' + track.videoId) + '?r=' + Date.now();
+            var sumber = api('/api/stream/song/' + track.videoId);
+            if (retryCount >= 2) sumber += '?proxy=1&r=' + Date.now();
+            Audio.src = sumber;
             Audio.load();
             var p = Audio.play();
             if (p && p.catch) p.catch(function () {});
