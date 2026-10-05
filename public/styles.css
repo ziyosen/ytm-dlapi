@@ -114,10 +114,14 @@ kbd {
 
 .brand-text .brand-project {
     margin: 0;
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    color: var(--primary-3);
+    font-family: "Sora", "Inter", system-ui, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    background: linear-gradient(90deg, #a5b4fc, #818cf8, #c4b5fd);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .brand .tg-link {
@@ -750,6 +754,10 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .np.is-open { opacity: 1; transform: translateY(0); }
+
+/* Atribut hidden HARUS menang atas display:flex, kalau tidak overlay
+   terus menutupi seluruh layar walau "tertutup" */
+.np[hidden] { display: none; }
 
 .np-close {
     position: absolute;

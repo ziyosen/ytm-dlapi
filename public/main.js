@@ -165,12 +165,11 @@
         document.getElementById('PlayerCover').src = track.cover || '';
         document.getElementById('PlayerTitle').textContent = track.title || '—';
         document.getElementById('PlayerArtist').textContent = track.artist || '—';
-        // Sinkron ke tampilan Now Playing (fullscreen)
+        // Sinkron ke tampilan Now Playing (fullscreen) — TIDAK dibuka otomatis,
+        // cukup klik cover/judul di player bar kalau mau tampilan besar.
         document.getElementById('NpCover').src = track.cover || '';
         document.getElementById('NpTitle').textContent = track.title || '—';
         document.getElementById('NpArtist').textContent = track.artist || '—';
-        // Lagu mulai diputar -> otomatis buka tampilan Now Playing
-        bukaNowPlaying(true);
         document.title = (track.title || 'Music Player') + ' — Music Player';
     }
 
