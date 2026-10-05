@@ -6,6 +6,7 @@
 
    Untuk jalan di komputer sendiri, tetap pakai:  node index.js
    ========================================================================== */
+const path = require('path');
 const express = require('express');
 
 const app = express();
@@ -14,7 +15,9 @@ const search = require('./search.js');
 const get = require('./get.js');
 const stream = require('./stream.js');
 
-const FRONTEND = `${__dirname}/../example-frontend`;
+// path.join WAJIB dipakai supaya tidak ada '..' di dalam path.
+// res.sendFile menolak path yang mengandung '..' (403 Forbidden).
+const FRONTEND = path.join(__dirname, '..', 'example-frontend');
 
 /* ------------------------------ Halaman depan ---------------------------- */
 app.get('/', (req, res) => {
