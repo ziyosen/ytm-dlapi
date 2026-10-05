@@ -146,6 +146,10 @@
         queue = list.slice();
         qSource = source;
         playAt(startIndex);
+        /* SEMUA sumber antrean (link mix/playlist/album, hasil search)
+           langsung disiapkan seluruhnya di belakang layar: 40 lagu ya 40,
+           50 ya 50 — tanpa kecuali. */
+        panaskanBatch(0, 999);
     }
 
     function playAt(i) {
@@ -641,10 +645,6 @@
                 setQueue(q, start, 'link');
                 setStatus('<b>' + q.length + '</b> lagu dari ' +
                     (d.name ? '"' + esc(d.name) + '"' : 'link') + ' — sedang diputar');
-
-                /* Link playlist: mulai panaskan lagu-lagu awal supaya tidak
-                   nunggu 30 detik saat user tekan next pertama kali. */
-                panaskanBatch(0, 999); // siapkan SEMUA lagu di link otomatis
             })
             .catch(function (err) {
                 console.error('[Music Player]', err);
