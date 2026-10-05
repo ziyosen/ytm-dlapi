@@ -16,7 +16,9 @@ const { infoLagu, lupakan } = require('./ytdlp.js');
 const router = express.Router();
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    '(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
+/* PENTING: UA ini HARUS sama dengan yang dipakai yt-dlp saat mengambil URL.
+   Kalau berbeda, googlevideo menjawab 403. */
 
 /* Ambil audio dari YouTube memakai URL yang sudah di-resolve yt-dlp */
 async function ambilDariYouTube(url, range) {

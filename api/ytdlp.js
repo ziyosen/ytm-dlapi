@@ -52,7 +52,13 @@ function argsDasar() {
         '--no-cache-dir',
         '--socket-timeout', '20',
         '--retries', '2',
-        '--extractor-retries', '2'
+        '--extractor-retries', '2',
+        // UA harus SAMA dengan yang dipakai api/stream.js saat streaming ke
+        // googlevideo — kalau berbeda, googlevideo menjawab 403.
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+        // Soal "page needs to be reloaded": yt-dlp butuh JS runtime (deno/node)
+        // untuk challenge/nsig YouTube sejak versi baru.
+        '--js-runtimes', 'node'
     ];
     const cf = cookiesFile();
     if (cf) { a.push('--cookies', cf); }
