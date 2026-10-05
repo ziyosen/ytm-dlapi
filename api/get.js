@@ -208,17 +208,54 @@ function cariDalam(obj, kunci, hasil) {
 
 async function mixQueue(listId, videoId) {
     const body = {
-        context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'id', gl: 'ID' } },
+        context: { client: { clientName: 'WEB', clientVersion: '2.20250930.01.00', hl: 'id', gl: 'ID' } },
         playlistId: listId
     };
     if (videoId) body.videoId = videoId;
 
-    const resp = await fetch('https://www.youtube.com/youtubei/v1/next?key=' + NEXT_KEY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-        body: JSON.stringify(body)
-    });
-    if (!resp.ok) throw new Error('YouTube internal API: HTTP ' + resp.status);
+    /* Catatan: endpoint youtubei kadang menolak IP tertentu (mis. IP Vercel)
+       dengan 403 bila request terlihat "polos". Pakai UA Chrome penuh dan
+       TANPA parameter key (endpoint publik tetap berfungsi tanpa key).
+       Kalau tetap 403, coba sekali lagi dengan client IOS. */
+    const percobaan = [
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                'Origin': 'https://www.youtube.com',
+                'Referer': 'https://www.youtube.com/'
+            },
+            url: 'https://www.youtube.com/youtubei/v1/next'
+        },
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+            },
+            url: 'https://www.youtube.com/youtubei/v1/next?key=' + NEXT_KEY
+        },
+        {
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+            url: 'https://www.youtube.com/youtubei/v1/next?key=' + NEXT_KEY
+        }
+    ];
+
+    let resp = null;
+    let terakhir = '';
+    for (let i = 0; i < percobaan.length; i++) {
+        try {
+            const r = await fetch(percobaan[i].url, {
+                method: 'POST',
+                headers: percobaan[i].headers,
+                body: JSON.stringify(body)
+            });
+            if (r.ok) { resp = r; break; }
+            terakhir = 'HTTP ' + r.status;
+        } catch (e) {
+            terakhir = e.message || String(e);
+        }
+    }
+    if (!resp) throw new Error('YouTube internal API: ' + (terakhir || 'gagal'));
     const d = await resp.json();
 
     const items = [];
