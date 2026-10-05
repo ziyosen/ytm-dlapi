@@ -105,7 +105,12 @@ function dapatkanBinary() {
     if (!siap) {
         siap = (async function () {
             // 1) sudah pernah disiapkan di /tmp
-            if (fs.existsSync(TMP_BIN) && bisaDijalankan(TMP_BIN)) return TMP_BIN;
+            //    GAGAL SAAT DIJALANKAN (mis. binary korup "PYI-189") ->
+            //    hapus lalu lanjut unduh ulang, jangan kunci error selamanya.
+            if (fs.existsSync(TMP_BIN)) {
+                if (bisaDijalankan(TMP_BIN)) return TMP_BIN;
+                try { fs.unlinkSync(TMP_BIN); } catch (e) { /* diabaikan */ }
+            }
 
             // 2) sudah terpasang di sistem (saat dikembangkan lokal)
             if (bisaDijalankan('yt-dlp')) return 'yt-dlp';
