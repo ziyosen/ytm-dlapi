@@ -1,0 +1,43 @@
+name: Sync YTDLP_COOKIES ke Vercel
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/sync-vercel.yml']
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set env var YTDLP_COOKIES di Vercel lalu redeploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          YTDLP_COOKIES: ${{ secrets.YTDLP_COOKIES }}
+        run: |
+          # Ambil ID project & org jika belum di-set
+          if [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "VERCEL_PROJECT_ID belum di-set — ambil daftar project..."
+            PROJECTS=$(curl -s "https://api.vercel.com/v9/projects" -H "Authorization: Bearer $VERCEL_TOKEN")
+            echo "$PROJECTS" | head -c 2000
+            PID=$(echo "$PROJECTS" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+          else
+            PID=$VERCEL_PROJECT_ID
+          fi
+          echo "Project ID: $PID"
+
+          # Upsert env var YTDLP_COOKIES (production) dari secret GitHub
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            "https://api.vercel.com/v10/projects/$PID/env?upsert=true" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"key\":\"YTDLP_COOKIES\",\"value\":\"$YTDLP_COOKIES\",\"type\":\"encrypted\",\"target\":[\"production\",\"preview\"]}")
+          echo "HTTP $CODE"
+
+          # Trigger redeploy production
+          curl -s -X POST "https://api.vercel.com/v13/deployments" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"ytm-dlapi\",\"target\":\"production\"}" | head -c 500
