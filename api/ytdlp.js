@@ -123,17 +123,24 @@ const MAKS_CACHE = 80;
  * Ambil metadata + URL audio langsung sebuah video.
  * @param {string} videoId
  * @param {boolean} [paksa]  true = abaikan cache (dipakai kalau URL kedaluwarsa)
+ * @param {string}  [client] paksa player client yt-dlp, mis. 'android_vr'.
+ *                           Dipakai kalau IP server diblokir YouTube
+ *                           ("Sign in to confirm you're not a bot").
  */
-async function infoLagu(videoId, paksa) {
+async function infoLagu(videoId, paksa, client) {
     const now = Date.now();
+    const kunci = videoId + '|' + (client || '');
 
     if (!paksa) {
-        const c = cache.get(videoId);
+        const c = cache.get(kunci);
         if (c && now - c.at < TTL) return c.data;
     }
 
+    const tambahan = [];
+    if (client) tambahan.push('--extractor-args', 'youtube:player_client=' + client);
+
     const out = await jalankan(
-        ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(ARGS_DASAR, [
+        ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(ARGS_DASAR, tambahan, [
             'https://www.youtube.com/watch?v=' + videoId
         ])
     );
@@ -156,15 +163,15 @@ async function infoLagu(videoId, paksa) {
 
     if (!data.url) throw new Error('URL audio tidak ditemukan untuk video ini');
 
-    cache.set(videoId, { at: now, data });
+    cache.set(kunci, { at: now, data });
     if (cache.size > MAKS_CACHE) cache.delete(cache.keys().next().value);
 
     return data;
 }
 
 /** Hapus satu video dari cache (dipakai saat URL kedaluwarsa) */
-function lupakan(videoId) {
-    cache.delete(videoId);
+function lupakan(videoId, client) {
+    cache.delete(videoId + '|' + (client || ''));
 }
 
 module.exports = { infoLagu: infoLagu, lupakan: lupakan, dapatkanBinary: dapatkanBinary };
