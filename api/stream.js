@@ -47,10 +47,10 @@ function teruskan(res, upstream, mulai, akhir, totalUkuran) {
     }
 }
 
-/* Ukuran segmen per request: 4 MB. Browser <audio> akan meminta segmen
+/* Ukuran segmen per request: 12 MB. Browser <audio> akan meminta segmen
    berikutnya (Range) secara otomatis, jadi lagu berapapun panjangnya
    tetap utuh sambil fungsi Vercel tidak pernah kena batas eksekusi. */
-const UKURAN_SEG = 4 * 1024 * 1024;
+const UKURAN_SEG = 12 * 1024 * 1024;
 
 router.get('/song/:videoId', async function (req, res) {
     const videoId = req.params.videoId;
@@ -64,7 +64,7 @@ router.get('/song/:videoId', async function (req, res) {
        jadi redirect langsung ke browser user selalu 403 → proxy WAJIB.
        Tapi streaming penuh lewat 1 request memicu batas waktu fungsi
        Vercel (maxDuration) → lagu mati di tengah.
-       Solusi: kita membalas HANYA segmen 4 MB per request dengan status
+       Solusi: kita membalas HANYA segmen 12 MB per request dengan status
        206 + Content-Range eksplisit. Browser <audio> otomatis meminta
        segmen berikutnya (HTTP Range standar) → pemutaran tak terbatas.
     */
@@ -84,7 +84,7 @@ router.get('/song/:videoId', async function (req, res) {
     try {
         /* Tentukan potongan (segmen) yang diminta:
            - Browser kirim "Range: bytes=A-B" → hormati.
-           - Tanpa Range → kita yang tentukan segmen 4 MB pertama, dan
+           - Tanpa Range → kita yang tentukan segmen 12 MB pertama, dan
              setiap request berikutnya dari browser otomatis membawa Range
              segmen berikutnya (standar HTTP untuk Accept-Ranges: bytes). */
         let mulai = 0, akhir = 0;
@@ -113,11 +113,11 @@ router.get('/song/:videoId', async function (req, res) {
                     return res.status(416).json({ error: 'Range di luar ukuran audio' });
                 }
 
-                /* Tanpa Range dari browser: pilih sendiri segmen 4 MB */
+                /* Tanpa Range dari browser: pilih sendiri segmen 12 MB */
                 if (!m) {
                     akhir = mulai + UKURAN_SEG - 1;
                 }
-                /* Range open-ended ("bytes=0-") → clamp ke segmen 4 MB juga */
+                /* Range open-ended ("bytes=0-") → clamp ke segmen 12 MB juga */
                 if (akhir <= 0 || akhir - mulai + 1 > UKURAN_SEG) {
                     akhir = mulai + UKURAN_SEG - 1;
                 }

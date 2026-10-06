@@ -155,6 +155,7 @@
     function playAt(i) {
         if (i < 0 || i >= queue.length) return;
 
+        nextPending = false;
         qIndex = i;
         errStreak = 0;
         retryCount = 0;
@@ -832,6 +833,7 @@
         2. Kalau masih gagal juga, baru lanjut ke lagu berikutnya.
     */
     var retryCount = 0; // retry untuk lagu yang sedang diputar
+    var nextPending = false; // guard anti dobel-skip (race handler error)
 
     Audio.addEventListener('error', function () {
         if (!Audio.src) return;
@@ -858,6 +860,8 @@
 
         retryCount = 0;
         if (errStreak <= 3 && qIndex + 1 < queue.length) {
+            if (nextPending) return;
+            nextPending = true;
             setStatus('Lagu ini gagal diputar — lanjut ke lagu berikutnya…');
             panaskanSatu(qIndex + 1); // panaskan dulu lagu berikutnya biar tidak skip lagi
             panaskanSatu(qIndex + 2);
@@ -871,6 +875,13 @@
     Audio.addEventListener('playing', function () {
         retryCount = 0;
         errStreak = 0;
+        setStatus('');
+    });
+
+    // Buffer kering (mis. segmen habis & instance Vercel cold) — JANGAN pause/skip,
+    // cukup beri tahu user bahwa sedang buffering, audio lanjut sendiri saat siap.
+    Audio.addEventListener('waiting', function () {
+        if (Audio.duration) setStatus('Koneksi lambat — buffering…');
     });
 
     // Ekspos beberapa fungsi (untuk debugging di console)

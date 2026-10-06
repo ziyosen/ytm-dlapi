@@ -169,23 +169,29 @@ async function albumInfo(albumId) {
 async function videoInfo(videoId) {
     // Coba beberapa player client — kalau satu diblokir ("Sign in to
     // confirm you're not a bot"), client lain kadang masih lolos.
+    /* Paralel race: jalankan 2 client bersamaan; yang sukses duluan menang.
+       Dulu sequential 4 client → kalau kena client lambat/gagal, tunggu bisa ±1 menit. */
     const CLIENTS = ['', 'tv', 'android_vr', 'mweb'];
     let terakhir = null;
-    for (const c of CLIENTS) {
+    for (let g = 0; g < CLIENTS.length; g += 2) {
+        const grup = CLIENTS.slice(g, g + 2).map(function (c) {
+            return infoLagu(videoId, false, c).then(function (d) {
+                return {
+                    videoId: d.videoId,
+                    title: d.title,
+                    artist: d.artist,
+                    cover: d.cover,
+                    duration: d.duration
+                };
+            });
+        });
         try {
-            const d = await infoLagu(videoId, false, c);
-            return {
-                videoId: d.videoId,
-                title: d.title,
-                artist: d.artist,
-                cover: d.cover,
-                duration: d.duration
-            };
+            return await Promise.any(grup);
         } catch (e) {
             terakhir = e;
         }
     }
-    throw terakhir || new Error('Video tidak bisa dibuka');
+    throw terakhir || new Error('Video tidak bisa dibaca');
 }
 
 /* ====================== Mix / Radio queue (RD...) ========================
