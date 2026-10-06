@@ -41,6 +41,18 @@
     var dragging = false;   // sedang menggeser seek bar?
     var errStreak = 0;      // jumlah error berturut-turut
 
+    /* ---- State machine pemutar (patch review Muse) ----
+       playToken: naik tiap playAt(); semua timer/async dari lagu lama
+       WAJIB cek token ini sebelum bertindak -> tidak ada lagi timer
+       15 detik yang memaksa putar lagu yang sudah ditinggal user.
+       waitRetryFor: indeks yang sudah memakai jatah tunggu-15s;
+       sentinel -1 (bukan falsy!) supaya lagu indeks 0 tidak loop. */
+    var playToken = 0;
+    var waitRetryFor = -1;
+    var preparedMap = {};   // videoId -> ts; dedupe prepare/prefetch
+    var batchToken = 0;     // naik tiap batch baru -> batch lama batal
+    var stallTimer = null;  // watchdog buffer kering
+
     /* ============================== 4) IKON ============================== */
     var ICON_PLAY =
         '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19 12z"/></svg>';
@@ -59,6 +71,24 @@
         var m = Math.floor(sec / 60);
         var s = Math.floor(sec % 60);
         return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    /* Nomor urut: padStart TIDAK memotong, jadi lagu ke-100+ tetap benar
+       (cara lama ('0'+n).slice(-2) bikin 100 tampil 00). */
+    function trackNo(n) {
+        return String(n).padStart(2, '0');
+    }
+
+    /* Dedupe prepare: true = silakan fetch, false = sudah/sedang disiapkan */
+    function claimPrepare(videoId) {
+        if (!videoId) return false;
+        if (preparedMap[videoId]) return false;
+        preparedMap[videoId] = Date.now();
+        return true;
+    }
+
+    function releasePrepare(videoId) {
+        if (videoId) delete preparedMap[videoId];
     }
 
     function bestCover(thumbnails, fallback) {
@@ -145,16 +175,20 @@
     function setQueue(list, startIndex, source) {
         queue = list.slice();
         qSource = source;
+        /* Queue baru: batalkan batch lama & reset dedupe prepare */
+        batchToken++;
+        preparedMap = {};
         playAt(startIndex);
-        /* SEMUA sumber antrean (link mix/playlist/album, hasil search)
-           langsung disiapkan seluruhnya di belakang layar: 40 lagu ya 40,
-           50 ya 50 — tanpa kecuali. */
-        panaskanBatch(0, 999);
+        /* playAt() sudah memanggil panaskanBatch() berprioritas
+           (jendela ±5 di sekitar lagu aktif dulu). */
     }
 
     function playAt(i) {
         if (i < 0 || i >= queue.length) return;
 
+        playToken++;            // batalkan semua timer lagu sebelumnya
+        waitRetryFor = -1;      // lagu baru berhak jatah tunggu-15s lagi
+        clearStallWatchdog();
         nextPending = false;
         qIndex = i;
         errStreak = 0;
@@ -180,6 +214,9 @@
         renderQueue();
         panaskanLaguBerikutnya(i);
         panaskanSatu(i + 2); // siapkan 2 lagu di depan lebih awal
+        /* Kalau user lompat jauh, prioritaskan ulang jendela ±5 di
+           sekitar posisi baru (batch lama otomatis batal via token). */
+        panaskanBatch();
     }
 
     /* ==================== ANTREAN (queue ala YT Music) ==================== */
@@ -198,7 +235,7 @@
             var aktif = (i === qIndex);
             html +=
                 '<div class="q-item' + (aktif ? ' is-now' : '') + '" data-q="' + i + '" role="button" tabindex="0">' +
-                    '<span class="q-no">' + (aktif ? '▶' : ('0' + (i + 1)).slice(-2)) + '</span>' +
+                    '<span class="q-no">' + (aktif ? '▶' : trackNo(i + 1)) + '</span>' +
                     '<img class="q-thumb" referrerpolicy="no-referrer" loading="lazy" ' +
                          'data-vid="' + esc(t.videoId) + '" ' +
                          'src="https://i.ytimg.com/vi/' + esc(t.videoId) + '/mqdefault.jpg" alt="">' +
@@ -223,61 +260,76 @@
       karena URL-nya sudah tersimpan di cache server.
     */
     function panaskanLaguBerikutnya(i) {
-        var berikut = queue[i + 1];
-        if (!berikut || !berikut.videoId) return;
-        try {
-            // Endpoint khusus: resolve URL saja (tanpa download audio) —
-            // lebih cepat & hemat daripada request Range ke stream penuh.
-            fetch(api('/api/stream/prepare/' + berikut.videoId))
-                .catch(function () {});
-        } catch (e) { /* diabaikan */ }
+        panaskanSatu(i + 1);
     }
 
-    /* Panaskan BANYAK lagu sekaligus (untuk playlist/mix dari link):
-       semua lagu di link langsung disiapkan di belakang layar sebelum
-       diputar, jadi kapan pun user next/klik lagu manapun, sudah siap. */
-    function panaskanBatch(mulai, jumlah) {
+    /* Panaskan antrean dengan PRIORITAS (patch review Muse):
+       - Urutan: lagu setelah posisi aktif dulu, jendela ±5 di sekitar
+         qIndex diprioritaskan, baru sisanya berurutan sampai akhir,
+         lalu yang sebelum qIndex. Playlist 50+ lagu tidak lagi
+         menunggu prefetch dari lagu 0 kalau user mulai di tengah.
+       - Dedupe via claimPrepare(): lagu yang sama tidak pernah
+         di-prepare dua kali (batch + panaskanSatu bisa balapan dulu).
+       - Batal otomatis: batchToken berubah (queue baru / playAt
+         memanggil ulang) -> rantai berhenti, tidak ada fetch yatim.
+       - Tetap LEMBUT ke YouTube: 1 per 1, jeda 2,5 detik (anti
+         bot-check seperti fix server commit 033d466). */
+    function panaskanBatch() {
         if (!queue.length) return;
-        var akhir = Math.min(mulai + jumlah, queue.length);
+        var myBatch = ++batchToken;
 
-        /* Susun urutan: lagu aktif dulu, lalu setelahnya berurutan —
-           supaya lagu yang mau diputar pasti paling awal disiapkan. */
         var daftar = [];
-        for (var k = mulai; k < akhir; k++) {
-            if (k !== qIndex) daftar.push(k);
+        var seen = {};
+        function dorong(idx) {
+            if (idx < 0 || idx >= queue.length || seen[idx]) return;
+            if (idx === qIndex) return;
+            seen[idx] = true;
+            daftar.push(idx);
         }
+        var k;
+        /* prioritas: 5 lagu berikutnya */
+        for (k = 1; k <= 5; k++) dorong(qIndex + k);
+        /* lalu 5 sebelumnya (buat prev / klik mundur) */
+        for (k = 1; k <= 5; k++) dorong(qIndex - k);
+        /* sisanya berurutan dari aktif ke akhir, lalu dari awal */
+        for (k = qIndex + 6; k < queue.length; k++) dorong(k);
+        for (k = 0; k < qIndex - 5; k++) dorong(k);
 
-        /* Paralel 1-per-1 DENGAN JEDA — dulu 4 sekaligus menembak YouTube
-           beruntun dan memicu bot-check ("page needs to be reloaded") yang
-           bikin resolve lagu berikutnya gagal massal (skip-skip sendiri).
-           Sekarang lembut: satu per satu, jeda 2,5 detik antar lagu. */
-        var PALAK = 1, iikut = 0;
+        var pos = 0;
         function kerjakan() {
-            if (iikut >= daftar.length) return;
-            var idx = daftar[iikut++];
+            if (myBatch !== batchToken) return;   // batch lama: berhenti
+            if (pos >= daftar.length) return;
+            var idx = daftar[pos++];
             var t = queue[idx];
-            if (!t || !t.videoId) { kerjakan(); return; }
+            if (!t || !claimPrepare(t.videoId)) { kerjakan(); return; }
+            var vid = t.videoId;
             setTimeout(function () {
-                fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
+                if (myBatch !== batchToken) return;
+                fetch(api('/api/stream/prepare/' + vid))
                     .then(function (r) {
                         if (!r.ok) {
-                            /* gagal -> ulang 1x */
-                            return fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
-                                .catch(function () {});
+                            releasePrepare(vid);
+                            return fetch(api('/api/stream/prepare/' + vid + '?r=' + Date.now()))
+                                .then(function (r2) { if (!r2.ok) releasePrepare(vid); })
+                                .catch(function () { releasePrepare(vid); });
                         }
                     })
-                    .catch(function () {})
-                    .then(function () { kerjakan(); }); // lanjut lagu berikutnya
-            }, iikut === 1 ? 0 : 2500);
+                    .catch(function () { releasePrepare(vid); })
+                    .then(function () { kerjakan(); });
+            }, pos === 1 ? 0 : 2500);
         }
-        for (var j = 0; j < PALAK; j++) kerjakan();
+        kerjakan();
     }
 
-    /* Panaskan 1 lagu (dipakai saat lagu aktif berganti) */
+    /* Panaskan 1 lagu (dipakai saat lagu aktif berganti) — dedupe juga */
     function panaskanSatu(idx) {
         var t = queue[idx];
         if (!t || !t.videoId) return;
-        fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now())).catch(function () {});
+        if (!claimPrepare(t.videoId)) return;
+        var vid = t.videoId;
+        fetch(api('/api/stream/prepare/' + vid))
+            .then(function (r) { if (!r.ok) releasePrepare(vid); })
+            .catch(function () { releasePrepare(vid); });
     }
 
     function nextTrack() {
@@ -382,6 +434,20 @@
         }
     }
 
+    function updatePositionState() {
+        if (!('mediaSession' in navigator)) return;
+        if (typeof navigator.mediaSession.setPositionState !== 'function') return;
+        try {
+            var d = Audio.duration;
+            if (!isFinite(d) || d <= 0) return;
+            navigator.mediaSession.setPositionState({
+                duration: d,
+                playbackRate: Audio.playbackRate || 1,
+                position: Math.min(Math.max(Audio.currentTime || 0, 0), d)
+            });
+        } catch (e) { /* abaikan */ }
+    }
+
     function setMediaSession(track) {
         if (!('mediaSession' in navigator)) return;
         try {
@@ -396,6 +462,35 @@
             navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
             navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
         } catch (e) { /* sebagian browser tidak mendukung */ }
+        /* Seek dari notif/lockscreen (patch): handler dipasang terpisah
+           karena sebagian browser melempar untuk handler yang tak
+           didukung — satu gagal tidak boleh menggagalkan yang lain. */
+        try {
+            navigator.mediaSession.setActionHandler('seekbackward', function (details) {
+                var off = (details && details.seekOffset) || 10;
+                Audio.currentTime = Math.max(0, (Audio.currentTime || 0) - off);
+                updatePositionState();
+            });
+        } catch (e) {}
+        try {
+            navigator.mediaSession.setActionHandler('seekforward', function (details) {
+                var off = (details && details.seekOffset) || 10;
+                var d = Audio.duration || 0;
+                Audio.currentTime = d ? Math.min(d, (Audio.currentTime || 0) + off) : (Audio.currentTime || 0) + off;
+                updatePositionState();
+            });
+        } catch (e) {}
+        try {
+            navigator.mediaSession.setActionHandler('seekto', function (details) {
+                if (!details || typeof details.seekTime !== 'number') return;
+                if (details.fastSeek && ('fastSeek' in Audio)) {
+                    Audio.fastSeek(details.seekTime);
+                } else {
+                    Audio.currentTime = details.seekTime;
+                }
+                updatePositionState();
+            });
+        } catch (e) {}
     }
 
     /* ============================ 7) RENDER ============================== */
@@ -514,7 +609,7 @@
 
                     rows +=
                         '<div class="track" data-ai="' + ai + '" data-q="' + qi + '" role="button" tabindex="0">' +
-                            '<span class="track-no">' + ('0' + (qi + 1)).slice(-2) + '</span>' +
+                            '<span class="track-no">' + trackNo(qi + 1) + '</span>' +
                             '<span class="track-title">' + esc(title) + '</span>' +
                             '<span class="track-play" aria-hidden="true">' +
                                 '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12z"/></svg>' +
@@ -577,7 +672,7 @@
         for (var i = 0; i < q.length; i++) {
             rows +=
                 '<div class="track" data-ai="link" data-q="' + i + '" role="button" tabindex="0">' +
-                    '<span class="track-no">' + ('0' + (i + 1)).slice(-2) + '</span>' +
+                    '<span class="track-no">' + trackNo(i + 1) + '</span>' +
                     '<span class="track-title">' + esc(q[i].title) + '</span>' +
                     '<span class="track-play" aria-hidden="true">' +
                         '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12z"/></svg>' +
@@ -809,6 +904,7 @@
     Audio.addEventListener('loadedmetadata', function () {
         document.getElementById('DurTime').textContent = fmtTime(Audio.duration);
         document.getElementById('NpDur').textContent = fmtTime(Audio.duration);
+        updatePositionState();
     });
 
     Audio.addEventListener('timeupdate', function () {
@@ -821,7 +917,11 @@
             NpSeekEl.value = (Audio.currentTime / d) * 1000;
             document.getElementById('NpCur').textContent = fmtTime(Audio.currentTime);
         }
+        updatePositionState();
     });
+
+    Audio.addEventListener('ratechange', updatePositionState);
+    Audio.addEventListener('seeked', updatePositionState);
 
     // ==== AUTOPLAY: lagu habis -> lanjut otomatis ke lagu berikutnya ====
     Audio.addEventListener('ended', function () {
@@ -829,19 +929,59 @@
     });
 
     /*
-      Kalau lagu gagal diputar: JANGAN langsung lompat ke lagu berikutnya
-      (dulu ini penyebab "lagu pindah sendiri"). Urutannya:
-        1. Coba muat ulang lagu yang sama (retry, maks 2x) — sering kali
-           hanya URL-nya yang kedaluwarsa.
-        2. Kalau masih gagal juga, baru lanjut ke lagu berikutnya.
+      State machine error (patch review Muse) — menggantikan handler
+      lama yang punya 4 lubang race:
+        1. window.__lastWaitRetry falsy di indeks 0 -> lagu pertama
+           bisa loop tunggu-15s selamanya. Sekarang sentinel -1.
+        2. Timer 15s menangkap qIndex global -> kalau user pindah lagu
+           saat menunggu, timer tetap memaksa putar. Sekarang setiap
+           timer menangkap playToken + indeks; token berubah = batal.
+        3. nextPending dicek terlalu akhir -> error beruntun bisa
+           menjadwalkan retry & skip bersamaan. Sekarang guard di
+           PALING ATAS handler.
+        4. __lastWaitRetry tidak pernah direset di playAt -> lagu baru
+           kehilangan jatah tunggu. Sekarang direset tiap playAt.
+      Urutan tetap: retry 2x -> tunggu 15s + coba 1x -> skip.
     */
     var retryCount = 0; // retry untuk lagu yang sedang diputar
     var nextPending = false; // guard anti dobel-skip (race handler error)
 
+    function clearStallWatchdog() {
+        if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
+    }
+    /* Dipakai juga oleh playAt di atas (function hoisting) */
+    function armStallWatchdog(myToken, myIndex) {
+        clearStallWatchdog();
+        stallTimer = setTimeout(function () {
+            stallTimer = null;
+            if (myToken !== playToken || myIndex !== qIndex) return;
+            if (Audio.paused || Audio.ended) return;
+            if (Audio.readyState >= 3) return; // sudah punya data: bukan stall
+            /* Buffer kering >25 detik: muat ulang lagu yang sama via
+               proxy TANPA skip — posisi putar dipertahankan. */
+            console.warn('[Music Player] watchdog: stall 25s, muat ulang tanpa skip');
+            var tr = queue[myIndex];
+            if (!tr) return;
+            var pos = Audio.currentTime || 0;
+            Audio.src = api('/api/stream/song/' + tr.videoId + '?proxy=1&r=' + Date.now());
+            Audio.load();
+            var p = Audio.play();
+            if (p && p.catch) p.catch(function () {});
+            if (pos > 3) {
+                try { Audio.currentTime = pos; } catch (e) {}
+            }
+        }, 25000);
+    }
+
     Audio.addEventListener('error', function () {
         if (!Audio.src) return;
+        if (nextPending) return;               /* guard paling atas */
+        var myToken = playToken;
+        var myIndex = qIndex;
+        var track = queue[myIndex];
+        if (!track) return;
         errStreak++;
-        console.warn('[Music Player] gagal memutar lagu ke-' + (qIndex + 1), 'percobaan:', retryCount + 1);
+        console.warn('[Music Player] gagal memutar lagu ke-' + (myIndex + 1), 'percobaan:', retryCount + 1);
 
         if (retryCount < 2) {
             retryCount++;
@@ -849,7 +989,6 @@
             // Percobaan 2: paksa lewat server (?proxy=1) — googlevideo
             // kadang menolak UA/headers browser tertentu.
             setStatus('Koneksi lagu terputus — mencoba lagi… (' + retryCount + '/2)');
-            var track = queue[qIndex];
             var pos = Audio.currentTime || 0;
             var sumber = api('/api/stream/song/' + track.videoId);
             if (retryCount >= 2) sumber += '?proxy=1&r=' + Date.now();
@@ -861,14 +1000,16 @@
             return;
         }
 
-        retryCount = 0;
-        /* Sebelum menyerah & lompat lagu: YouTube kadang bot-check sementara
-           (pulih dalam 10-20 detik). Tunggu & coba sekali lagi dulu. */
-        if (!window.__lastWaitRetry || window.__lastWaitRetry !== qIndex) {
-            window.__lastWaitRetry = qIndex;
+        /* Sebelum menyerah & lompat lagu: YouTube kadang bot-check
+           sementara (pulih dalam 10-20 detik). Tunggu & coba 1x dulu.
+           Sentinel -1: indeks 0 pun hanya dapat SATU jatah tunggu. */
+        if (waitRetryFor !== myIndex) {
+            waitRetryFor = myIndex;
+            retryCount = 0;
             setStatus('YouTube sedang membatasi akses — menunggu 15 detik lalu mencoba lagi…');
             setTimeout(function () {
-                var tr = queue[qIndex];
+                if (myToken !== playToken || qIndex !== myIndex) return; // user sudah pindah
+                var tr = queue[myIndex];
                 if (!tr) return;
                 Audio.src = api('/api/stream/song/' + tr.videoId + '?proxy=1&r=' + Date.now());
                 Audio.load();
@@ -878,29 +1019,37 @@
             return;
         }
 
-        if (errStreak <= 3 && qIndex + 1 < queue.length) {
-            if (nextPending) return;
+        if (errStreak <= 3 && myIndex + 1 < queue.length) {
             nextPending = true;
             setStatus('Lagu ini gagal diputar — lanjut ke lagu berikutnya…');
-            panaskanSatu(qIndex + 1); // panaskan dulu lagu berikutnya biar tidak skip lagi
-            panaskanSatu(qIndex + 2);
-            setTimeout(nextTrack, 1200);
+            panaskanSatu(myIndex + 1); // panaskan dulu lagu berikutnya biar tidak skip lagi
+            panaskanSatu(myIndex + 2);
+            setTimeout(function () {
+                if (myToken !== playToken) return; // user sudah pindah manual
+                nextPending = false;
+                nextTrack();
+            }, 1200);
         } else {
             setStatus('<b>Gagal</b> memutar lagu ini. Coba lagu lain ya.');
         }
     });
 
-    // Sukses mulai memutar -> reset retry & error streak
+    // Sukses mulai memutar -> reset retry & error streak + matikan watchdog
     Audio.addEventListener('playing', function () {
         retryCount = 0;
         errStreak = 0;
+        clearStallWatchdog();
         setStatus('');
     });
 
     // Buffer kering (mis. segmen habis & instance Vercel cold) — JANGAN pause/skip,
     // cukup beri tahu user bahwa sedang buffering, audio lanjut sendiri saat siap.
+    // Watchdog 25s (token-guarded) menangani stall yang tidak pulih sendiri.
     Audio.addEventListener('waiting', function () {
-        if (Audio.duration) setStatus('Koneksi lambat — buffering…');
+        if (Audio.duration) {
+            setStatus('Koneksi lambat — buffering…');
+            armStallWatchdog(playToken, qIndex);
+        }
     });
 
     // Ekspos beberapa fungsi (untuk debugging di console)
