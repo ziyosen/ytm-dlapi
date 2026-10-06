@@ -862,6 +862,22 @@
         }
 
         retryCount = 0;
+        /* Sebelum menyerah & lompat lagu: YouTube kadang bot-check sementara
+           (pulih dalam 10-20 detik). Tunggu & coba sekali lagi dulu. */
+        if (!window.__lastWaitRetry || window.__lastWaitRetry !== qIndex) {
+            window.__lastWaitRetry = qIndex;
+            setStatus('YouTube sedang membatasi akses — menunggu 15 detik lalu mencoba lagi…');
+            setTimeout(function () {
+                var tr = queue[qIndex];
+                if (!tr) return;
+                Audio.src = api('/api/stream/song/' + tr.videoId + '?proxy=1&r=' + Date.now());
+                Audio.load();
+                var pp = Audio.play();
+                if (pp && pp.catch) pp.catch(function () {});
+            }, 15000);
+            return;
+        }
+
         if (errStreak <= 3 && qIndex + 1 < queue.length) {
             if (nextPending) return;
             nextPending = true;
