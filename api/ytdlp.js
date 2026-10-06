@@ -197,11 +197,31 @@ async function infoLagu(videoId, paksa, client) {
     const tambahan = [];
     if (client) tambahan.push('--extractor-args', 'youtube:player_client=' + client);
 
-    const out = await jalankan(
-        ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(argsDasar(), tambahan, [
-            'https://www.youtube.com/watch?v=' + videoId
-        ])
-    );
+    /* Retry dengan backoff: YouTube kadang menjawab "The page needs to be
+       reloaded" (bot-check sementara) — biasanya pulih dalam beberapa detik.
+       Coba ulang maksimal 2x dengan jeda 3s lalu 8s sebelum menyerah. */
+    let out = null;
+    let terakhirErr = null;
+    for (let coba = 0; coba < 3; coba++) {
+        try {
+            out = await jalankan(
+                ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(argsDasar(), tambahan, [
+                    'https://www.youtube.com/watch?v=' + videoId
+                ])
+            );
+            break;
+        } catch (e) {
+            terakhirErr = e;
+            const pesan = String(e && e.message || e);
+            const bolehUlang = /reloaded|Sign in|bot|429|temporary/i.test(pesan);
+            if (coba < 2 && bolehUlang) {
+                await new Promise(function (r) { setTimeout(r, coba === 0 ? 3000 : 8000); });
+                continue;
+            }
+            throw e;
+        }
+    }
+    if (!out) throw terakhirErr || new Error('Resolve gagal');
 
     let d;
     try {

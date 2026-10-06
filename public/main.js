@@ -247,25 +247,28 @@
             if (k !== qIndex) daftar.push(k);
         }
 
-        /* Paralel terbatas (4 sekaligus, tanpa jeda) — semua lagu dari link
-           selesai disiapkan dalam ~1 menit, bukan 2,5 detik per lagu.
-           Kalau ada yang gagal, dicoba ulang 1x di belakang layar. */
-        var PALAK = 4, iikut = 0;
+        /* Paralel 1-per-1 DENGAN JEDA — dulu 4 sekaligus menembak YouTube
+           beruntun dan memicu bot-check ("page needs to be reloaded") yang
+           bikin resolve lagu berikutnya gagal massal (skip-skip sendiri).
+           Sekarang lembut: satu per satu, jeda 2,5 detik antar lagu. */
+        var PALAK = 1, iikut = 0;
         function kerjakan() {
             if (iikut >= daftar.length) return;
             var idx = daftar[iikut++];
             var t = queue[idx];
             if (!t || !t.videoId) { kerjakan(); return; }
-            fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
-                .then(function (r) {
-                    if (!r.ok) {
-                        /* gagal -> ulang 1x */
-                        return fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
-                            .catch(function () {});
-                    }
-                })
-                .catch(function () {})
-                .then(function () { kerjakan(); }); // lanjut lagu berikutnya
+            setTimeout(function () {
+                fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
+                    .then(function (r) {
+                        if (!r.ok) {
+                            /* gagal -> ulang 1x */
+                            return fetch(api('/api/stream/prepare/' + t.videoId + '?r=' + Date.now()))
+                                .catch(function () {});
+                        }
+                    })
+                    .catch(function () {})
+                    .then(function () { kerjakan(); }); // lanjut lagu berikutnya
+            }, iikut === 1 ? 0 : 2500);
         }
         for (var j = 0; j < PALAK; j++) kerjakan();
     }
