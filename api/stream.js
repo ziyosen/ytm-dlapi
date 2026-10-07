@@ -12,6 +12,7 @@
 const express = require('express');
 const { Readable } = require('stream');
 const { infoLagu, lupakan, infoLaguBalap } = require('./ytdlp.js');
+const { gudangAda, gudangAmbil, gudangUrl } = require('./gudang_client_snippet.js');
 
 const router = express.Router();
 
@@ -95,6 +96,47 @@ router.get('/song/:videoId', async function (req, res) {
             if (m[2] !== '') akhir = parseInt(m[2], 10);
         } else {
             akhir = mulai + UKURAN_SEG - 1; /* fallback: segmen pertama */
+        }
+
+        /* ===== GUDANG VPS DULU (pola AnnieXMusic: cek gudang) =====
+           Resolve di Vercel terbukti ~50% 502 saat IP dihukum; di VPS
+           cookies sehat (uji Hermes 7,2 dtk). Jadi sebelum resolve
+           lokal: tanya gudang. Ada berkasnya -> relay dari VPS (Range
+           dihormati layanan gudang, mime audio/mp4). Belum ada -> minta
+           VPS mengambilnya. Gagal semua -> jatuh ke resolve lokal di
+           bawah (cadangan terakhir). X-Sumber menandai asal layanan. */
+        try {
+            let dariGudang = false;
+            if (await gudangAda(videoId)) {
+                dariGudang = true;
+            } else if (await gudangAmbil(videoId)) {
+                dariGudang = true;
+            }
+            if (dariGudang) {
+                const rangeHeader = range ? { Range: range } : {};
+                const up = await fetch(gudangUrl(videoId), { headers: rangeHeader });
+                if (up.ok || up.status === 206 || up.status === 416) {
+                    res.setHeader('X-Sumber', 'gudang');
+                    if (up.status === 416) {
+                        return res.status(416).json({ error: 'Range di luar ukuran audio' });
+                    }
+                    const cr2 = up.headers.get('content-range');
+                    const cl2 = up.headers.get('content-length');
+                    res.status(206);
+                    res.setHeader('Content-Type', up.headers.get('content-type') || 'audio/mp4');
+                    res.setHeader('Accept-Ranges', 'bytes');
+                    res.setHeader('Cache-Control', 'no-store');
+                    if (cr2) res.setHeader('Content-Range', cr2);
+                    if (cl2) res.setHeader('Content-Length', cl2);
+                    const body2 = Readable.fromWeb(up.body);
+                    req.on('close', function () { try { body2.destroy(); } catch (e) {} });
+                    body2.on('error', function () { try { res.end(); } catch (e) {} });
+                    body2.pipe(res);
+                    return;
+                }
+            }
+        } catch (e) {
+            /* gudang tidak menjawab: lanjut resolve lokal */
         }
 
         let info = null;
