@@ -1100,6 +1100,37 @@
         }, 5000);
     });
 
+
+    /* ===== AGAR NGGAK USAH KLIK 2X DI NOTIFIKASI (patch Muse) =====
+       playbackState sinkron + WakeLock layar (best-effort). */
+    function setPlaybackState() {
+        try {
+            if (navigator.mediaSession) {
+                navigator.mediaSession.playbackState =
+                    Audio.ended ? 'none' : (Audio.paused ? 'paused' : 'playing');
+            }
+        } catch (e) {}
+    }
+    var wakeLock = null;
+    function mintaWakeLock() {
+        try {
+            if (navigator.wakeLock && !wakeLock && !Audio.paused) {
+                navigator.wakeLock.request('screen').then(function (lock) {
+                    wakeLock = lock;
+                    lock.addEventListener('release', function () { wakeLock = null; });
+                }).catch(function () {});
+            }
+        } catch (e) {}
+    }
+    Audio.addEventListener('play', function () { setPlaybackState(); mintaWakeLock(); });
+    Audio.addEventListener('playing', setPlaybackState);
+    Audio.addEventListener('pause', function () {
+        setPlaybackState();
+        if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && !Audio.paused) mintaWakeLock();
+    });
     // Ekspos beberapa fungsi (untuk debugging di console)
     window.musicPlayer = {
         playAt: playAt,
