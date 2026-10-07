@@ -287,10 +287,14 @@ function lupakan(videoId, client) {
    Fungsi ini opsional bagi pemanggil; default infoLagu tetap cepat
    dari cache/inflight. */
 async function infoLaguBalap(videoId, paksa) {
-    return Promise.any([
-        resolveSekali(videoId, paksa, ''),
-        resolveSekali(videoId, paksa, 'tv')
-    ]);
+    /* Race BERTAHAP (koreksi Muse QA pasca-7422bbb): Promise.any barengan
+       menggandakan trafik resolve per lagu — saat YouTube menghukum IP,
+       keduanya sama-sama 502. Sekarang: default dulu; kalau gagal baru 'tv'. */
+    try {
+        return await resolveSekali(videoId, paksa, '');
+    } catch (e) {
+        return resolveSekali(videoId, paksa, 'tv');
+    }
 }
 
 /* API publik: cek cache -> inflight dedupe -> resolve baru. */
