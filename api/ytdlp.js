@@ -202,10 +202,17 @@ async function infoLagu(videoId, paksa, client) {
        Coba ulang maksimal 2x dengan jeda 3s lalu 8s sebelum menyerah. */
     let out = null;
     let terakhirErr = null;
-    for (let coba = 0; coba < 3; coba++) {
+    /* Rute: 3x dengan client normal, lalu 1x fallback client 'tv' — kadang
+       bot-check hanya mengenai fingerprint client utama. */
+    const rute = [null, null, null, 'tv'];
+    for (let coba = 0; coba < rute.length; coba++) {
+        const clientFallback = rute[coba];
+        const tambahanCoba = clientFallback
+            ? tambahan.concat(['--extractor-args', 'youtube:player_client=' + clientFallback])
+            : tambahan;
         try {
             out = await jalankan(
-                ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(argsDasar(), tambahan, [
+                ['-J', '-f', 'bestaudio[ext=m4a]/bestaudio/best'].concat(argsDasar(), tambahanCoba, [
                     'https://www.youtube.com/watch?v=' + videoId
                 ])
             );
@@ -214,7 +221,7 @@ async function infoLagu(videoId, paksa, client) {
             terakhirErr = e;
             const pesan = String(e && e.message || e);
             const bolehUlang = /reloaded|Sign in|bot|429|temporary/i.test(pesan);
-            if (coba < 2 && bolehUlang) {
+            if (coba < rute.length - 1 && bolehUlang) {
                 await new Promise(function (r) { setTimeout(r, coba === 0 ? 3000 : 8000); });
                 continue;
             }
