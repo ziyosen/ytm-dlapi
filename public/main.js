@@ -1052,6 +1052,54 @@
         }
     });
 
+    /* ===== BACKGROUND PLAYBACK =====
+       Bos lapor: musik mati saat keluar dari browser ke layar utama (tab
+       TIDAK ditutup). Tidak ada pause handler di kode — yang mematikan adalah
+       browser yang menidurkan tab tersembunyi (apalagi Chrome/Browseroh
+       dengan penghemat baterai), dan timer watchdog kena throttling.
+       Barisan pertahanan:
+       1. Rekam lastProgressAt tiap timeupdate (bukan mengandalkan timer).
+       2. Di visibilitychange -> hidden: JANGAN pause apa pun (memastikan
+          tidak ada kode kita yang mematikan musik di latar).
+       3. Saat kembali visible: kalau seharusnya sedang memutar (tidak
+          dipause user, belum ended) tapi currentTime beku >30 detik,
+          panggil Audio.play() lagi + muat ulang segmen via proxy kalau
+          posisinya masih beku 5 detik setelahnya.
+       Catatan jujur: kalau HP user mematikan tab dari hemat daya/kelola
+       aplikasi, web tidak bisa mencegah — itu batas platform. */
+    var userPaused = false;
+    var lastProgressAt = 0;
+    Audio.addEventListener('play', function () { userPaused = false; lastProgressAt = Date.now(); });
+    Audio.addEventListener('pause', function () {
+        if (!Audio.ended) userPaused = true;
+    });
+    Audio.addEventListener('timeupdate', function () {
+        if (!Audio.paused) lastProgressAt = Date.now();
+    });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') return;
+        /* kembali terlihat */
+        if (!Audio.src || Audio.ended || userPaused) return;
+        var diam = Date.now() - (lastProgressAt || 0);
+        if (!Audio.paused && diam < 30000) return; /* sehat */
+        var posSblm = Audio.currentTime || 0;
+        var p = Audio.play();
+        if (p && p.catch) p.catch(function () {});
+        setTimeout(function () {
+            if (Audio.ended || userPaused) return;
+            if ((Audio.currentTime || 0) <= posSblm + 0.5 && diam >= 30000) {
+                /* masih beku: muat ulang segmen yang sama via proxy */
+                var tr = queue[qIndex];
+                if (!tr) return;
+                Audio.src = api('/api/stream/song/' + tr.videoId + '?proxy=1&r=' + Date.now());
+                Audio.load();
+                var p2 = Audio.play();
+                if (p2 && p2.catch) p2.catch(function () {});
+                try { Audio.currentTime = posSblm; } catch (e) {}
+            }
+        }, 5000);
+    });
+
     // Ekspos beberapa fungsi (untuk debugging di console)
     window.musicPlayer = {
         playAt: playAt,
