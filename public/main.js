@@ -569,6 +569,34 @@
         }
 
         setStatus('<b>' + data.length + '</b> lagu ditemukan — klik untuk memutar');
+
+        /* PEMANAS AWAL (obat bug laporan bos 2026-10-07: lagu-lagu hasil
+           pencarian di HP "tidak bisa diputar" — kemungkinan resolve/putar
+           dibekukan Chrome begitu user keluar layar sebelum benar-benar
+           bunyi). Begitu hasil tampil, panaskan 3 lagu teratas SEKARANG
+           juga, selagi user masih di halaman: resolve server selesai
+           sebelum siapa pun mengklik. Lembut: 1 fetch prepare, jeda
+           800ms antarlagu, dan berhenti kalau user sudah klik lagunya
+           duluan (playAt mengganti batchToken). */
+        (function () {
+            var myToken = batchToken;
+            var daftar = data.slice(0, 3);
+            var pos = 0;
+            function kerjakan() {
+                if (myToken !== batchToken) return;
+                if (pos >= daftar.length) return;
+                var vid = daftar[pos++].videoId;
+                if (!vid || !claimPrepare(vid)) { kerjakan(); return; }
+                setTimeout(function () {
+                    if (myToken !== batchToken) return;
+                    fetch(api('/api/stream/prepare/' + vid))
+                        .then(function (r) { if (!r.ok) releasePrepare(vid); })
+                        .catch(function () { releasePrepare(vid); })
+                        .then(function () { kerjakan(); });
+                }, pos === 1 ? 0 : 800);
+            }
+            kerjakan();
+        })();
     }
 
     function openAlbum(ai) {

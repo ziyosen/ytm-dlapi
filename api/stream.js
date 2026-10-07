@@ -11,7 +11,7 @@
    ========================================================================== */
 const express = require('express');
 const { Readable } = require('stream');
-const { infoLagu, lupakan } = require('./ytdlp.js');
+const { infoLagu, lupakan, infoLaguBalap } = require('./ytdlp.js');
 
 const router = express.Router();
 
@@ -104,7 +104,8 @@ router.get('/song/:videoId', async function (req, res) {
         for (let ci = 0; ci < klienCoba.length; ci++) {
             const c = klienCoba[ci];
             try {
-                info = await infoLagu(videoId, false, c);
+                info = c ? await infoLagu(videoId, false, c)
+                         : await infoLaguBalap(videoId, false);
                 totalUkuran = info.size || null;
 
                 /* Minta offset di luar ukuran file? Balas 416 eksplisit

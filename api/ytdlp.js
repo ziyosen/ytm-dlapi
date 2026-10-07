@@ -177,6 +177,25 @@ const cache = new Map();
 const TTL = 45 * 60 * 1000;   // URL YouTube berlaku ±6 jam, kita pakai 45 menit
 const MAKS_CACHE = 80;
 
+/* ===== INFLIGHT DEDUPE (pola AnnieXMusic: deduplicate_download) =====
+   Cek gudang dulu: kalau resolve lagu yang sama sedang berjalan (mis.
+   2 tab / prefetch + klik serentak), hasilnya dipakai bersama — yt-dlp
+   hanya benar-benar dijalankan SATU kali. Melindungi rate-limit
+   bot-check yang kemarin bikin skip massal. */
+const inflight = new Map();
+
+function resolveSekali(videoId, paksa, client) {
+    const kunci = videoId + '|' + (client || '') + '|' + (paksa ? '1' : '0');
+    const ada = inflight.get(kunci);
+    if (ada) return ada;
+    const p = infoLaguInti(videoId, paksa, client);
+    inflight.set(kunci, p);
+    /* Bersihkan setelah selesai (sukses maupun gagal) — tidak menelan
+       error, hanya melepaskan slot supaya request berikutnya bebas. */
+    p.then(function () { inflight.delete(kunci); }, function () { inflight.delete(kunci); });
+    return p;
+}
+
 /**
  * Ambil metadata + URL audio langsung sebuah video.
  * @param {string} videoId
@@ -185,7 +204,7 @@ const MAKS_CACHE = 80;
  *                           Dipakai kalau IP server diblokir YouTube
  *                           ("Sign in to confirm you're not a bot").
  */
-async function infoLagu(videoId, paksa, client) {
+async function infoLaguInti(videoId, paksa, client) {
     const now = Date.now();
     const kunci = videoId + '|' + (client || '');
 
@@ -260,4 +279,28 @@ function lupakan(videoId, client) {
     cache.delete(videoId + '|' + (client || ''));
 }
 
-module.exports = { infoLagu: infoLagu, lupakan: lupakan, dapatkanBinary: dapatkanBinary };
+/* ===== BALAPAN SUMBER (pola AnnieXMusic: race_ytdlp_and_api) =====
+   Umunnya resolve pertama berhasil dari cache penerbangan (dedupe) di
+   atas. Kalau dua client berbeda diminta bersamaan (?client= vs kunci
+   default), biarkan keduanya jalan; yang pertama berhasil yang dipakai
+   — mengurangi p99 latency saat salah satu fingerprint kena bot-check.
+   Fungsi ini opsional bagi pemanggil; default infoLagu tetap cepat
+   dari cache/inflight. */
+async function infoLaguBalap(videoId, paksa) {
+    return Promise.any([
+        resolveSekali(videoId, paksa, ''),
+        resolveSekali(videoId, paksa, 'tv')
+    ]);
+}
+
+/* API publik: cek cache -> inflight dedupe -> resolve baru. */
+function infoLagu(videoId, paksa, client) {
+    if (!client) {
+        const c = cache.get(videoId + '|');
+        if (c && Date.now() - c.at < TTL && !paksa) return Promise.resolve(c.data);
+        return resolveSekali(videoId, paksa, '');
+    }
+    return resolveSekali(videoId, paksa, client);
+}
+
+module.exports = { infoLagu: infoLagu, lupakan: lupakan, dapatkanBinary: dapatkanBinary, infoLaguBalap: infoLaguBalap };
