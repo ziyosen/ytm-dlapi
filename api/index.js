@@ -10,6 +10,7 @@ const path = require('path');
 const express = require('express');
 
 const app = express();
+app.use(express.json());
 
 const search = require('./search.js');
 const get = require('./get.js');
@@ -86,6 +87,10 @@ app.get('/', (req, res) => {
 app.use('/api/', search);
 app.use('/api/get', get);
 app.use('/api/stream', stream);
+app.use('/api/queue', require('./queue.js'));
+app.use('/api/playback', require('./playback.js'));
+app.use('/api/favorit', require('./favorit.js'));
+app.use('/api/stats', require('./stats.js'));
 
 /* ------------------------------- File statis ----------------------------- */
 app.use(express.static(FRONTEND));
