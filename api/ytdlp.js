@@ -223,7 +223,7 @@ async function infoLaguInti(videoId, paksa, client) {
     let terakhirErr = null;
     /* Rute: 3x dengan client normal, lalu 1x fallback client 'tv' — kadang
        bot-check hanya mengenai fingerprint client utama. */
-    const rute = [null, null, null, 'tv'];
+    const rute = [null, 'tv', 'android_vr'];
     for (let coba = 0; coba < rute.length; coba++) {
         const clientFallback = rute[coba];
         const tambahanCoba = clientFallback

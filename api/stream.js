@@ -21,11 +21,23 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
 /* PENTING: UA ini HARUS sama dengan yang dipakai yt-dlp saat mengambil URL.
    Kalau berbeda, googlevideo menjawab 403. */
 
-/* Ambil audio dari YouTube memakai URL yang sudah di-resolve yt-dlp */
+/* Ambil audio dari YouTube memakai URL yang sudah di-resolve yt-dlp.
+   YTD-PROXY: kalau YTDLP_PROXY diset (mis. socks5://...), semua trafik ke
+   googlevideo di-tunnel via undici ProxyAgent supaya IP=di URL tetap cocok. */
+const { ProxyAgent } = (() => {
+    if (!process.env.YTDLP_PROXY) return {};
+    try { return require('undici'); } catch (e) { return {}; }
+})();
+const proxyDispatcher = process.env.YTDLP_PROXY && ProxyAgent
+    ? new ProxyAgent(process.env.YTDLP_PROXY)
+    : null;
+
 async function ambilDariYouTube(url, range) {
     const headers = { 'User-Agent': UA };
     if (range) headers.Range = range;
-    return fetch(url, { headers });
+    const opts = { headers };
+    if (proxyDispatcher) opts.dispatcher = proxyDispatcher;
+    return fetch(url, opts);
 }
 
 /* Kirim balasan ke browser (206 selalu, dengan Content-Range eksplisit) */
@@ -79,7 +91,7 @@ router.get('/song/:videoId', async function (req, res) {
     /* Daftar player client yang dicoba berurutan kalau satu gagal.
        Dibatasi 2 supaya total waktu resolve tidak melebihi batas 60s
        fungsi Vercel saat cold start. */
-    const CLIENT_FALLBACK = ['', 'tv'];
+    const CLIENT_FALLBACK = ['', 'tv', 'android_vr'];
     const klienCoba = client ? [client] : CLIENT_FALLBACK;
 
     try {
