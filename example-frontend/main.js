@@ -38,6 +38,7 @@
     var queue = [];         // daftar lagu yang sedang diputar
     var qIndex = -1;        // posisi sekarang di dalam queue
     var qSource = null;     // 'songs' atau nomor album (ai)
+    var lastBeat = 0;       // YTM-01: throttle heartbeat posisi
     var dragging = false;   // sedang menggeser seek bar?
     var errStreak = 0;      // jumlah error berturut-turut
 
@@ -589,6 +590,16 @@
             SeekEl.value = (Audio.currentTime / d) * 1000;
             document.getElementById('CurTime').textContent = fmtTime(Audio.currentTime);
         }
+        // YTM-01: heartbeat posisi ke server tiap 5 dtk (throttle) — sinkron antar perangkat
+        var now = Date.now();
+        if (now - lastBeat > 5000 && queue[qIndex]) {
+            lastBeat = now;
+            fetch(api('/api/playback/position'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ positionSec: Math.floor(Audio.currentTime) })
+            }).catch(function () {});
+        }
     });
 
     // ==== AUTOPLAY: lagu habis -> lanjut otomatis ke lagu berikutnya ====
@@ -618,4 +629,22 @@
         toggle: togglePlay,
         queue: function () { return queue; }
     };
+
+    /* ==== YTM-01: AUTO-RESUME — restore lagu terakhir saat halaman dibuka ==== */
+    (function autoResume() {
+        fetch(api('/api/playback'))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (st) {
+                if (!st || !st.videoId) return;
+                // masukkan lagu terakhir ke queue lalu seek ke posisi tercatat
+                queue.push({ videoId: st.videoId, title: st.title || 'Tanpa judul' });
+                qIndex = 0;
+                Audio.src = api('/api/stream/song/' + st.videoId);
+                Audio.currentTime = st.positionSec || 0;
+                updateBar({ title: st.title || 'Tanpa judul' });
+                setStatus('⏯️ Lanjutkan lagu terakhir: <b>' + (st.title || '') + '</b> — tekan Play.');
+                // TIDAK autoplay (aturan browser) — user tekan Play, posisi sudah pas
+            })
+            .catch(function () { /* server tidak merespons: abaikan */ });
+    })();
 })();

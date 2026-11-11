@@ -1,16 +1,16 @@
 {
   "task": "YTM-01",
-  "updated": "2026-11-11",
+  "updated": "2026-11-11 (checkpoint 2)",
   "done": [
     "queue API (api/queue.js: add/remove/reorder/clear/next, dedupe, limit 200)",
     "playback API (api/playback.js: set/position/pause/resume/stop + persist playbackState.json utk auto-resume)",
     "favorit+riwayat (api/favorit.js: persist JSON, dedupe, limit 500)",
     "stats (api/stats.js: totalRiwayat/totalFavorit/topLagu)",
     "routes terpasang di api/index.js + express.json() middleware ditambahkan (BUG FIX: POST body kosong sebelumnya)",
-    "smoke test lokal port 3111: SEMUA ENDPOINT PASS"
+    "smoke test lokal port 3111: SEMUA ENDPOINT PASS",
+    "auto-resume frontend (main.js: restore lagu terakhir saat load + heartbeat posisi 5 dtk)"
   ],
   "todo": [
-    "auto-resume frontend (example-frontend/main.js pakai GET /api/playback saat load)",
     "review Muse",
     "commit+push setelah GO Bos"
   ],
