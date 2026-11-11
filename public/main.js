@@ -1191,8 +1191,8 @@
             .then(function (st) {
                 if (!st || !st.videoId) return;
                 var data = st.videoId;
-                fetch(api('/api/get/' + encodeURIComponent(data)))
-                    .then(function (r2) { return r2.ok ? r2.json() : null; })
+                fetch(api('/api/get/song/' + encodeURIComponent(data)))
+                    .then(function (r2) { if (!r2.ok) throw new Error('invalid'); return r2.json(); })
                     .then(function (info) {
                         var judul = (info && (info.title || (info.videoDetails && info.videoDetails.title))) || st.title || 'Tanpa judul';
                         queue.push({ videoId: data, title: judul });
