@@ -201,6 +201,13 @@
         Audio.src = api('/api/stream/song/' + track.videoId);
         Audio.load();
 
+        // YTM-01: laporkan lagu aktif ke server (sinkron antar perangkat)
+        fetch(api('/api/playback/set'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId: track.videoId, title: track.title || '', positionSec: 0 })
+        }).catch(function () {});
+
         var p = Audio.play();
         if (p && p.catch) {
             p.catch(function (err) {
@@ -936,6 +943,15 @@
     });
 
     Audio.addEventListener('timeupdate', function () {
+        // YTM-01: heartbeat posisi tiap 5 dtk
+        if (Date.now() - (window.__lastBeat || 0) > 5000 && queue[qIndex]) {
+            window.__lastBeat = Date.now();
+            fetch(api('/api/playback/position'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ positionSec: Math.floor(Audio.currentTime) })
+            }).catch(function () {});
+        }
         var d = Audio.duration || 0;
         if (!dragging && d) {
             SeekEl.value = (Audio.currentTime / d) * 1000;
@@ -1167,4 +1183,28 @@
         toggle: togglePlay,
         queue: function () { return queue; }
     };
+
+    // ==== YTM-01: AUTO-RESUME — restore lagu terakhir saat halaman dibuka ====
+    (function autoResume() {
+        fetch(api('/api/playback'))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (st) {
+                if (!st || !st.videoId) return;
+                var data = st.videoId;
+                fetch(api('/api/get/' + encodeURIComponent(data)))
+                    .then(function (r2) { return r2.ok ? r2.json() : null; })
+                    .then(function (info) {
+                        var judul = (info && (info.title || (info.videoDetails && info.videoDetails.title))) || st.title || 'Tanpa judul';
+                        queue.push({ videoId: data, title: judul });
+                        qIndex = queue.length - 1;
+                        Audio.src = api('/api/stream/song/' + data);
+                        Audio.addEventListener('loadedmetadata', function once() {
+                            Audio.removeEventListener('loadedmetadata', once);
+                            if (st.positionSec) { try { Audio.currentTime = st.positionSec; } catch (e) {} }
+                        });
+                        if (typeof updateBar === 'function') updateBar({ title: judul });
+                        if (typeof setStatus === 'function') setStatus('⏯️ Lanjutkan terakhir: <b>' + judul + '</b> — tekan Play.');
+                    }).catch(function () {});
+            }).catch(function () {});
+    })();
 })();
